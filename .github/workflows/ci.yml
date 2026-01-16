@@ -2,8 +2,6 @@ name: CI
 
 on:
   push:
-    branches:
-      - "**"
   pull_request:
 
 jobs:
@@ -18,6 +16,11 @@ jobs:
         uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
           go-version-file: "go.mod"
+
+      - name: Setup Just
+        uses: taiki-e/install-action@0e76c5c569f13f7eb21e8e5b26fe710062b57b62 # v2.65.13
+        with:
+          tool: just
 
       - name: Check formatting
         run: just fmt
