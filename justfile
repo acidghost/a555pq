@@ -9,7 +9,7 @@ ldflags := '-s -w -X main.buildVersion='+version \
         +' -X main.buildDate='+build_time
 
 goos := if os() == 'macos' { 'darwin' } else { os() }
-goarch := if arch() == 'aarch64' { 'arm64' } else { arch() }
+goarch := if arch() == 'aarch64' { 'arm64' } else if arch() == 'x86_64' { 'amd64' } else { arch() }
 
 alias b := build
 alias r := run
