@@ -1,0 +1,124 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      has-changes: ${{ steps.check.outputs.has-changes }}
+      latest-nightly: ${{ steps.check.outputs.latest-nightly }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check for changes
+        id: check
+        run: |
+          LATEST_NIGHTLY=$(git describe --tags --match 'nightly-*' --abbrev=0 2>/dev/null || echo "")
+          echo "latest-nightly=${LATEST_NIGHTLY}" >> $GITHUB_OUTPUT
+
+          if [ -z "$LATEST_NIGHTLY" ]; then
+            echo "No previous nightly release found, proceeding with build"
+            echo "has-changes=true" >> $GITHUB_OUTPUT
+          else
+            COMMITS=$(git rev-list "$LATEST_NIGHTLY..HEAD" --count)
+            if [ "$COMMITS" -gt 0 ]; then
+              echo "Found $COMMITS commits since last nightly release ($LATEST_NIGHTLY)"
+              echo "has-changes=true" >> $GITHUB_OUTPUT
+            else
+              echo "No new commits since last nightly release ($LATEST_NIGHTLY)"
+              echo "has-changes=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+  build:
+    needs: check-changes
+    if: needs.check-changes.outputs.has-changes == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        with:
+          go-version-file: "go.mod"
+
+      - name: Setup Just
+        uses: taiki-e/install-action@0e76c5c569f13f7eb21e8e5b26fe710062b57b62 # v2.65.13
+        with:
+          tool: just
+
+      - name: Build all platforms
+        run: just build-all
+
+      - name: Compress binaries
+        run: |
+          cd build
+          for binary in a555pq-*; do
+            tar -cvzf "${binary}.tar.gz" "$binary"
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: binaries
+          path: build/*.tar.gz
+
+  release:
+    needs: [check-changes, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Download artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: binaries
+          path: build
+
+      - name: Delete old nightly release
+        run: |
+          if [ -n "$LATEST_NIGHTLY" ]; then
+            echo "Deleting old nightly release: $LATEST_NIGHTLY"
+
+            RELEASE_ID=$(gh api "repos/:owner/:repo/releases/tags/$LATEST_NIGHTLY" --jq '.id')
+
+            if [ -n "$RELEASE_ID" ]; then
+              gh api -X DELETE "repos/:owner/:repo/releases/$RELEASE_ID"
+            fi
+
+            gh api -X DELETE "repos/:owner/:repo/git/refs/tags/$LATEST_NIGHTLY"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LATEST_NIGHTLY: ${{ needs.check-changes.outputs.latest-nightly }}
+
+      - name: Create nightly release
+        run: |
+          TAG="nightly-$(date -u +%Y-%m-%d-%H-%M-%S)"
+          TITLE="Nightly Build - $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+
+          gh release create "$TAG" \
+            --title "$TITLE" \
+            --notes "Automated nightly build" \
+            build/*.tar.gz
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
