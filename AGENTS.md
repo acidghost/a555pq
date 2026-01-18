@@ -13,12 +13,6 @@ Use Justfile for all operations (run `just help` for complete list):
 - `just install` - Copy binary to GOPATH/bin
 - `just clean` - Remove build directory
 
-**Testing**: No test command in justfile - use standard Go:
-- `go test ./...` - Run all tests
-- `go test -v ./...` - Run tests with verbose output
-- `go test -run TestName ./path/to/package` - Run single test
-- `go test -cover ./...` - Run tests with coverage report
-
 ## Code Style Guidelines
 
 ### Imports and Formatting
@@ -120,24 +114,3 @@ return f.Format(output)
 4. Register in `cmd/root.go` init()
 5. Add output types to `internal/formatter/output.go`
 6. Implement formatter methods for new output types
-
-### Project Structure
-```
-a555pq/
-├── main.go                    # Entry point with build variables
-├── justfile                   # Build commands
-├── .golangci.yml              # Linting configuration
-├── cmd/                       # CLI commands (Cobra)
-│   ├── root.go               # Root command and version
-│   ├── shared/               # Shared types and constants
-│   └── pypi/                 # PyPI package commands
-├── internal/                  # Internal packages (not exported)
-│   ├── pypi/                 # PyPI client and types
-│   └── formatter/            # Output formatters (table/JSON)
-└── build/                     # Compiled binaries (gitignored)
-```
-
-### Module Information
-- Module: `github.com/acidghost/a555pq`
-- Go version: 1.25.3
-- CLI framework: Cobra v1.10.2
