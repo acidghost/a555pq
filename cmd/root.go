@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/acidghost/a555pq/cmd/github"
 	"github.com/acidghost/a555pq/cmd/npm"
 	"github.com/acidghost/a555pq/cmd/pypi"
 	"github.com/acidghost/a555pq/cmd/shared"
@@ -38,8 +39,10 @@ func Execute() {
 func init() {
 	RootCmd.PersistentFlags().VarP(&shared.OutputFormat, "output", "o", "Output format (table|json)")
 
-	RootCmd.AddCommand(pypi.Cmd)
+	RootCmd.AddCommand(github.Cmd)
 	RootCmd.AddCommand(npm.Cmd)
+	RootCmd.AddCommand(pypi.Cmd)
+
 	RootCmd.AddCommand(versionCmd)
 
 }
