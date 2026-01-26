@@ -20,7 +20,10 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Approve and enable auto-merge
-        if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
+        if: >-
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          (steps.metadata.outputs.update-type == 'version-update:semver-minor' &&
+           contains(steps.metadata.outputs.dependency-names, 'taiki-e/install-action'))
         run: |
           echo "Approving PR"
           gh pr review --approve "$PR_URL"
