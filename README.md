@@ -1,5 +1,7 @@
 # a555pq
 
+[![CI](https://github.com/acidghost/a555pq/actions/workflows/ci.yml/badge.svg)](https://github.com/acidghost/a555pq/actions/workflows/ci.yml)
+
 A CLI tool to query package information from various package managers like PyPI, npm, and container registries.
 
 ## Installation
