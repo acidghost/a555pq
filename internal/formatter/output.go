@@ -31,6 +31,10 @@ func (f *TableFormatter) Format(data any) error {
 		return f.formatLatest(v)
 	case *BrowseOutput:
 		return f.formatBrowse(v)
+	case *ContainerShowOutput:
+		return f.formatContainerShow(v)
+	case *ContainerLatestOutput:
+		return f.formatContainerLatest(v)
 	default:
 		return fmt.Errorf("unsupported output type")
 	}
@@ -84,6 +88,33 @@ func (f *TableFormatter) formatLatest(data *LatestOutput) error {
 
 func (f *TableFormatter) formatBrowse(data *BrowseOutput) error {
 	fmt.Fprintf(f.writer, "Opening:\t%s\n", data.URL)
+	return f.writer.Flush()
+}
+
+func (f *TableFormatter) formatContainerShow(data *ContainerShowOutput) error {
+	fmt.Fprintf(f.writer, "Name:\t%s\n", data.Name)
+	if data.Description != "" {
+		fmt.Fprintf(f.writer, "Description:\t%s\n", data.Description)
+	}
+	if data.Tag != "" {
+		fmt.Fprintf(f.writer, "Tag:\t%s\n", data.Tag)
+	}
+	if data.Digest != "" {
+		fmt.Fprintf(f.writer, "Digest:\t%s\n", data.Digest)
+	}
+	if data.TagDate != "" {
+		fmt.Fprintf(f.writer, "Tag Date:\t%s\n", data.TagDate)
+	}
+	if data.TagSize != "" {
+		fmt.Fprintf(f.writer, "Tag Size:\t%s\n", data.TagSize)
+	}
+	fmt.Fprintf(f.writer, "Registry:\t%s\n", data.Registry)
+	fmt.Fprintf(f.writer, "Image:\t%s\n", data.FullImageRef)
+	return f.writer.Flush()
+}
+
+func (f *TableFormatter) formatContainerLatest(data *ContainerLatestOutput) error {
+	fmt.Fprintf(f.writer, "Latest Tag:\t%s\n", data.Version)
 	return f.writer.Flush()
 }
 

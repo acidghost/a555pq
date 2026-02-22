@@ -37,3 +37,19 @@ type BrowseOutput struct {
 	URL     string
 	Opened  bool
 }
+
+type ContainerShowOutput struct {
+	Name         string
+	Description  string
+	Tag          string
+	TagDate      string
+	TagSize      string
+	Digest       string
+	Registry     string
+	FullImageRef string
+}
+
+type ContainerLatestOutput struct {
+	Image   string
+	Version string
+}

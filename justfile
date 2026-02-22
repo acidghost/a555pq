@@ -36,7 +36,10 @@ fmt:
     go fmt ./...
 
 lint:
-    golangci-lint run
+	golangci-lint run
+
+test *args:
+	go test -v {{args}} ./...
 
 install: build
     cp -v './build/{{program}}-{{goos}}-{{goarch}}' "$(go env GOBIN)/{{program}}"

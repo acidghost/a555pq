@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/acidghost/a555pq/cmd/container"
 	"github.com/acidghost/a555pq/cmd/github"
 	"github.com/acidghost/a555pq/cmd/npm"
 	"github.com/acidghost/a555pq/cmd/pypi"
@@ -20,7 +21,7 @@ var (
 var RootCmd = &cobra.Command{
 	Use:   "a555pq",
 	Short: "Query different package indices",
-	Long:  "A CLI tool to query package information from various package managers like PyPI, npm, and more.",
+	Long:  "A CLI tool to query package information from various package managers like PyPI, npm, container registries, and more.",
 }
 
 func SetBuildInfo(version, commit, date string) {
@@ -39,6 +40,7 @@ func Execute() {
 func init() {
 	RootCmd.PersistentFlags().VarP(&shared.OutputFormat, "output", "o", "Output format (table|json)")
 
+	RootCmd.AddCommand(container.Cmd)
 	RootCmd.AddCommand(github.Cmd)
 	RootCmd.AddCommand(npm.Cmd)
 	RootCmd.AddCommand(pypi.Cmd)
