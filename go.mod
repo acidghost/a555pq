@@ -4,7 +4,7 @@ go 1.25.6
 
 require (
 	github.com/Masterminds/semver v1.5.0
-	github.com/google/go-containerregistry v0.21.0
+	github.com/google/go-containerregistry v0.21.1
 	github.com/spf13/cobra v1.10.2
 )
 
