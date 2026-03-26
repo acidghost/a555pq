@@ -2,6 +2,8 @@ module github.com/acidghost/a555pq
 
 go 1.25.6
 
+toolchain go1.26.1
+
 require (
 	github.com/Masterminds/semver v1.5.0
 	github.com/google/go-containerregistry v0.21.2
