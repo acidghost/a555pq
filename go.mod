@@ -2,7 +2,7 @@ module github.com/acidghost/a555pq
 
 go 1.25.7
 
-toolchain go1.26.1
+toolchain go1.26.2
 
 require (
 	github.com/Masterminds/semver v1.5.0
