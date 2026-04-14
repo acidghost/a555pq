@@ -1,34 +1,29 @@
 name: LCM
 
 on:
-  pull_request: {}
+  pull_request:
+    branches:
+      - main
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  dependabot:
+  lcm:
+    name: LCM
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write # needed to approve the PR
     if: |
-      github.event.pull_request.user.login == 'dependabot[bot]' &&
-      github.repository == 'acidghost/a555pq'
+      github.event.pull_request.user.login == 'renovate[bot]' &&
+      github.repository == 'acidghost/a555pq' &&
+      contains(github.event.pull_request.labels.*.name, 'lcm/approve')
     steps:
-      - name: Dependabot metadata
-        id: metadata
-        uses: dependabot/fetch-metadata@ffa630c65fa7e0ecfa0625b5ceda64399aea1b36 # v3.0.0
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Approve and enable auto-merge
-        if: >-
-          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
-          (steps.metadata.outputs.update-type == 'version-update:semver-minor' &&
-           contains(steps.metadata.outputs.dependency-names, 'taiki-e/install-action'))
-        run: |
-          echo "Approving PR"
-          gh pr review --approve "$PR_URL"
-          echo "Enabling auto-merge"
-          gh pr merge --auto --squash "$PR_URL"
+      - name: Approve PR
+        run: gh pr review --approve "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
