@@ -56,10 +56,10 @@ jobs:
         with:
           go-version-file: "go.mod"
 
-      - name: Setup Just
-        uses: taiki-e/install-action@0abfcd587b70a713fdaa7fb502c885e2112acb15 # v2.75.7
+      - name: Setup mise
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:
-          tool: just
+          version: 2026.4.11
 
       - name: Build all platforms
         run: just build-all
