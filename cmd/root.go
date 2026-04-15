@@ -6,8 +6,7 @@ import (
 
 	"github.com/acidghost/a555pq/cmd/container"
 	"github.com/acidghost/a555pq/cmd/github"
-	"github.com/acidghost/a555pq/cmd/npm"
-	"github.com/acidghost/a555pq/cmd/pypi"
+	"github.com/acidghost/a555pq/cmd/registry"
 	"github.com/acidghost/a555pq/cmd/shared"
 	"github.com/spf13/cobra"
 )
@@ -42,8 +41,7 @@ func init() {
 
 	RootCmd.AddCommand(container.Cmd)
 	RootCmd.AddCommand(github.Cmd)
-	RootCmd.AddCommand(npm.Cmd)
-	RootCmd.AddCommand(pypi.Cmd)
+	registry.RegisterCommands(RootCmd)
 
 	RootCmd.AddCommand(versionCmd)
 

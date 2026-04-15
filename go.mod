@@ -6,6 +6,7 @@ toolchain go1.26.2
 
 require (
 	github.com/Masterminds/semver v1.5.0
+	github.com/git-pkgs/registries v0.4.1
 	github.com/google/go-containerregistry v0.21.5
 	github.com/spf13/cobra v1.10.2
 )
@@ -13,8 +14,12 @@ require (
 require (
 	github.com/containerd/stargz-snapshotter/estargz v0.18.2 // indirect
 	github.com/docker/cli v29.4.0+incompatible // indirect
-	github.com/docker/distribution v2.8.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.3 // indirect
+	github.com/git-pkgs/packageurl-go v0.3.1 // indirect
+	github.com/git-pkgs/purl v0.1.10 // indirect
+	github.com/git-pkgs/spdx v0.1.2 // indirect
+	github.com/git-pkgs/vers v0.2.4 // indirect
+	github.com/github/go-spdx/v2 v2.4.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/klauspost/compress v1.18.5 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
