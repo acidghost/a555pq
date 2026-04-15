@@ -12,12 +12,58 @@ github.com/docker/cli/cli/config/configfile
 github.com/docker/cli/cli/config/credentials
 github.com/docker/cli/cli/config/memorystore
 github.com/docker/cli/cli/config/types
-# github.com/docker/distribution v2.8.3+incompatible
-## explicit
 # github.com/docker/docker-credential-helpers v0.9.3
 ## explicit; go 1.21
 github.com/docker/docker-credential-helpers/client
 github.com/docker/docker-credential-helpers/credentials
+# github.com/git-pkgs/packageurl-go v0.3.1
+## explicit; go 1.18
+github.com/git-pkgs/packageurl-go
+# github.com/git-pkgs/purl v0.1.10
+## explicit; go 1.25.6
+github.com/git-pkgs/purl
+# github.com/git-pkgs/registries v0.4.1
+## explicit; go 1.25.6
+github.com/git-pkgs/registries
+github.com/git-pkgs/registries/all
+github.com/git-pkgs/registries/client
+github.com/git-pkgs/registries/internal/cargo
+github.com/git-pkgs/registries/internal/clojars
+github.com/git-pkgs/registries/internal/cocoapods
+github.com/git-pkgs/registries/internal/conda
+github.com/git-pkgs/registries/internal/core
+github.com/git-pkgs/registries/internal/cpan
+github.com/git-pkgs/registries/internal/cran
+github.com/git-pkgs/registries/internal/deno
+github.com/git-pkgs/registries/internal/dub
+github.com/git-pkgs/registries/internal/elm
+github.com/git-pkgs/registries/internal/golang
+github.com/git-pkgs/registries/internal/hackage
+github.com/git-pkgs/registries/internal/haxelib
+github.com/git-pkgs/registries/internal/hex
+github.com/git-pkgs/registries/internal/homebrew
+github.com/git-pkgs/registries/internal/julia
+github.com/git-pkgs/registries/internal/luarocks
+github.com/git-pkgs/registries/internal/maven
+github.com/git-pkgs/registries/internal/nimble
+github.com/git-pkgs/registries/internal/npm
+github.com/git-pkgs/registries/internal/nuget
+github.com/git-pkgs/registries/internal/packagist
+github.com/git-pkgs/registries/internal/pub
+github.com/git-pkgs/registries/internal/pypi
+github.com/git-pkgs/registries/internal/rubygems
+github.com/git-pkgs/registries/internal/terraform
+github.com/git-pkgs/registries/internal/urlparser
+# github.com/git-pkgs/spdx v0.1.2
+## explicit; go 1.25.6
+github.com/git-pkgs/spdx
+# github.com/git-pkgs/vers v0.2.4
+## explicit; go 1.25.6
+github.com/git-pkgs/vers
+# github.com/github/go-spdx/v2 v2.4.0
+## explicit; go 1.24
+github.com/github/go-spdx/v2/spdxexp
+github.com/github/go-spdx/v2/spdxexp/spdxlicenses
 # github.com/google/go-containerregistry v0.21.5
 ## explicit; go 1.25.0
 github.com/google/go-containerregistry/internal/and

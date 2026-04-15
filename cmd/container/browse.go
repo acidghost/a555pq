@@ -2,9 +2,6 @@ package container
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
-	"runtime"
 
 	"github.com/acidghost/a555pq/cmd/shared"
 	"github.com/acidghost/a555pq/internal/container"
@@ -25,29 +22,7 @@ var browseCmd = &cobra.Command{
 			return err
 		}
 
-		var opened bool
-		var openErr error
-
-		switch runtime.GOOS {
-		case "darwin":
-			//nolint:gosec
-			openErr = exec.Command("open", url).Start()
-		case "linux":
-			//nolint:gosec
-			openErr = exec.Command("xdg-open", url).Start()
-		case "windows":
-			//nolint:gosec
-			openErr = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
-		default:
-			openErr = fmt.Errorf("unsupported platform")
-		}
-
-		if openErr != nil {
-			opened = false
-			fmt.Fprintf(os.Stderr, "Warning: could not open browser: %v\n", openErr)
-		} else {
-			opened = true
-		}
+		opened := shared.OpenBrowser(url)
 
 		if !opened {
 			fmt.Println(url)
