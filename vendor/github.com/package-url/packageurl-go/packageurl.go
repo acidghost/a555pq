@@ -28,7 +28,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -61,6 +61,8 @@ var (
 	TypeBitnami = "bitnami"
 	// TypeCargo is a pkg:cargo purl.
 	TypeCargo = "cargo"
+	// TypeChromeExtension is a pkg:chrome-extension purl.
+	TypeChromeExtension = "chrome-extension"
 	// TypeCocoapods is a pkg:cocoapods purl.
 	TypeCocoapods = "cocoapods"
 	// TypeComposer is a pkg:composer purl.
@@ -97,8 +99,10 @@ var (
 	TypeNPM = "npm"
 	// TypeNuget is a pkg:nuget purl.
 	TypeNuget = "nuget"
-	// TypeOCI is a pkg:oci purl
+	// TypeOCI is a pkg:oci purl.
 	TypeOCI = "oci"
+	// TypeOTP is a pkg:otp purl.
+	TypeOTP = "otp"
 	// TypePub is a pkg:pub purl.
 	TypePub = "pub"
 	// TypePyPi is a pkg:pypi purl.
@@ -107,14 +111,14 @@ var (
 	TypeQpkg = "qpkg"
 	// TypeRPM is a pkg:rpm purl.
 	TypeRPM = "rpm"
-	// TypeSWID is pkg:swid purl
+	// TypeSWID is a pkg:swid purl.
 	TypeSWID = "swid"
-	// TypeSwift is pkg:swift purl
+	// TypeSwift is a pkg:swift purl.
 	TypeSwift = "swift"
-	// TypeOTP is a pkg:otp purl.
-	TypeOTP = "otp"
 	// TypeVSCodeExtension is a pkg:vscode-extension purl.
 	TypeVSCodeExtension = "vscode-extension"
+	// TypeYocto is a pkg:yocto purl.
+	TypeYocto = "yocto"
 
 	// KnownTypes is a map of types that are officially supported by the spec.
 	// See https://github.com/package-url/purl-spec/blob/master/PURL-TYPES.rst#known-purl-types
@@ -124,6 +128,7 @@ var (
 		TypeBitbucket:       {},
 		TypeBitnami:         {},
 		TypeCargo:           {},
+		TypeChromeExtension: {},
 		TypeCocoapods:       {},
 		TypeComposer:        {},
 		TypeConan:           {},
@@ -144,14 +149,15 @@ var (
 		TypeNPM:             {},
 		TypeNuget:           {},
 		TypeOCI:             {},
+		TypeOTP:             {},
 		TypePub:             {},
 		TypePyPi:            {},
 		TypeQpkg:            {},
 		TypeRPM:             {},
 		TypeSWID:            {},
 		TypeSwift:           {},
-		TypeOTP:             {},
 		TypeVSCodeExtension: {},
+		TypeYocto:           {},
 	}
 
 	TypeApache      = "apache"
@@ -201,7 +207,6 @@ var (
 	TypeVagrant     = "vagrant"
 	TypeVim         = "vim"
 	TypeWORDPRESS   = "wordpress"
-	TypeYocto       = "yocto"
 
 	// CandidateTypes is a map of types that are not yet officially supported by the spec,
 	// but are being considered for inclusion.
@@ -263,20 +268,30 @@ type Qualifier struct {
 	Value string
 }
 
+// String returns a canonical string representation of the qualifier according to [SPEC].
+//
+// [SPEC] https://github.com/package-url/purl-spec/blob/main/PURL-SPECIFICATION.rst#rules-for-each-purl-component
 func (q Qualifier) String() string {
 	// A value must be a percent-encoded string
-	return fmt.Sprintf("%s=%s", q.Key, url.PathEscape(q.Value))
+	var b strings.Builder
+	escapeQualifier(&b, q.Key)
+	b.WriteByte('=')
+	escapeQualifier(&b, q.Value)
+	return b.String()
 }
 
 // Qualifiers is a slice of key=value pairs, with order preserved as it appears
 // in the package URL.
 type Qualifiers []Qualifier
 
-// urlQuery returns a raw URL query with all the qualifiers as keys + values.
-func (q Qualifiers) urlQuery() string {
+// String returns a canonical string representation of the qualifiers as keys + values.
+// Canonical form requires qualifier keys to be lexicographically ordered.
+// The leading `?` qualifier component delimiter is excluded.
+func (q Qualifiers) String() string {
 	if len(q) == 0 {
 		return ""
 	}
+	slices.SortFunc(q, func(a, b Qualifier) int { return strings.Compare(a.Key, b.Key) })
 	var b strings.Builder
 	// Estimate capacity: each qualifier needs key + "=" + value + "&"
 	b.Grow(len(q) * 32)
@@ -299,9 +314,7 @@ func escapeQualifier(b *strings.Builder, s string) {
 		if isQualifierSafe(c) {
 			b.WriteByte(c)
 		} else {
-			b.WriteByte('%')
-			b.WriteByte(hexUpper[c>>4])
-			b.WriteByte(hexUpper[c&0x0f])
+			writePercentEncodedByte(b, c)
 		}
 	}
 }
@@ -325,7 +338,7 @@ func QualifiersFromMap(mm map[string]string) Qualifiers {
 	}
 
 	// sort for deterministic qualifier order
-	sort.Sort(qualifiersSortable(q))
+	slices.SortFunc(q, func(a, b Qualifier) int { return strings.Compare(a.Key, b.Key) })
 
 	return q
 }
@@ -341,14 +354,6 @@ func (qq Qualifiers) Map() map[string]string {
 	}
 
 	return m
-}
-
-func (qq Qualifiers) String() string {
-	var kvPairs []string
-	for _, q := range qq {
-		kvPairs = append(kvPairs, q.String())
-	}
-	return strings.Join(kvPairs, "&")
 }
 
 func (qq *Qualifiers) Normalize() error {
@@ -368,7 +373,7 @@ func (qq *Qualifiers) Normalize() error {
 		}
 		normedQQ = append(normedQQ, Qualifier{key, q.Value})
 	}
-	sort.Sort(qualifiersSortable(normedQQ))
+	slices.SortFunc(normedQQ, func(a, b Qualifier) int { return strings.Compare(a.Key, b.Key) })
 	for i := 1; i < len(normedQQ); i++ {
 		if normedQQ[i-1].Key == normedQQ[i].Key {
 			return fmt.Errorf("duplicate qualifier key: %q", normedQQ[i].Key)
@@ -378,34 +383,30 @@ func (qq *Qualifiers) Normalize() error {
 	return nil
 }
 
-// qualifiersSortable implements sort.Interface for Qualifiers to avoid reflection.
-type qualifiersSortable Qualifiers
-
-func (q qualifiersSortable) Len() int           { return len(q) }
-func (q qualifiersSortable) Less(i, j int) bool { return q[i].Key < q[j].Key }
-func (q qualifiersSortable) Swap(i, j int)      { q[i], q[j] = q[j], q[i] }
-
 // toLowerASCII returns s with all ASCII uppercase letters converted to lowercase.
 // It avoids allocation if s is already lowercase.
 func toLowerASCII(s string) string {
+	needsConvert := -1
 	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c >= 'A' && c <= 'Z' {
-			// Found an uppercase letter, need to convert
-			b := make([]byte, len(s))
-			copy(b, s[:i])
-			for ; i < len(s); i++ {
-				c := s[i]
-				if c >= 'A' && c <= 'Z' {
-					b[i] = c + 32
-				} else {
-					b[i] = c
-				}
-			}
-			return string(b)
+		if c := s[i]; c >= 'A' && c <= 'Z' {
+			needsConvert = i
+			break
 		}
 	}
-	return s
+	if needsConvert < 0 {
+		return s
+	}
+
+	b := make([]byte, len(s))
+	copy(b, s[:needsConvert])
+	for i := needsConvert; i < len(s); i++ {
+		c := s[i]
+		if c >= 'A' && c <= 'Z' {
+			c += 32
+		}
+		b[i] = c
+	}
+	return string(b)
 }
 
 // PackageURL is the struct representation of the parts that make a package url
@@ -432,43 +433,47 @@ func NewPackageURL(purlType, namespace, name, version string,
 	}
 }
 
-// ToString returns the human-readable instance of the PackageURL structure.
-// This is the literal purl as defined by the spec.
+// ToString returns a canonical string representation of the qualifier according to [SPEC].
+//
+// [SPEC] https://github.com/package-url/purl-spec/blob/main/PURL-SPECIFICATION.rst#rules-for-each-purl-component
 func (p *PackageURL) ToString() string {
 	var b strings.Builder
-	// Estimate capacity for typical purl
+	// Estimate capacity for typical purl, including component delimiters.
 	b.Grow(4 + len(p.Type) + 1 + len(p.Namespace) + 1 + len(p.Name) + 1 + len(p.Version) + len(p.Subpath) + 32)
 
 	b.WriteString("pkg:")
 	b.WriteString(p.Type)
 
-	// Write namespace segments, escaping each one
+	// Each namespace segment shall be a percent-encoded string.
 	if p.Namespace != "" {
 		start := 0
 		for i := 0; i <= len(p.Namespace); i++ {
 			if i == len(p.Namespace) || p.Namespace[i] == '/' {
 				if i > start {
 					b.WriteByte('/')
-					escapeToBuilder(&b, p.Namespace[start:i])
+					writePercentEncodedString(&b, p.Namespace[start:i])
 				}
 				start = i + 1
 			}
 		}
 	}
 
+	// A name shall be a percent-encoded string.
 	b.WriteByte('/')
-	escapeToBuilder(&b, p.Name)
+	writePercentEncodedString(&b, p.Name)
 
 	if p.Version != "" {
+		// A version shall be a percent-encoded string.
 		b.WriteByte('@')
-		escapeToBuilder(&b, p.Version)
+		writePercentEncodedString(&b, p.Version)
 	}
 
 	if len(p.Qualifiers) > 0 {
 		b.WriteByte('?')
-		b.WriteString(p.Qualifiers.urlQuery())
+		b.WriteString(p.Qualifiers.String())
 	}
 
+	// Each subpath segment shall be a percent-encoded string.
 	if p.Subpath != "" {
 		b.WriteByte('#')
 		escapeSubpath(&b, p.Subpath)
@@ -481,7 +486,7 @@ func (p PackageURL) String() string {
 	return p.ToString()
 }
 
-// FromString parses a valid package url string into a PackageURL structure
+// FromString parses a valid package url string into a [PackageURL].
 func FromString(purl string) (PackageURL, error) {
 	// Check scheme
 	if len(purl) < 4 || toLowerASCII(purl[:4]) != "pkg:" {
@@ -523,7 +528,7 @@ func FromString(purl string) (PackageURL, error) {
 	}
 
 	// Parse namespace, name, version
-	namespace, name, version, err := separateNamespaceNameVersion(remainder)
+	namespace, name, version, err := separateNamespaceNameVersion(typ, remainder)
 	if err != nil {
 		return PackageURL{}, err
 	}
@@ -566,30 +571,27 @@ func (p *PackageURL) Normalize() error {
 		Namespace:  typeAdjustNamespace(typ, namespace),
 		Name:       typeAdjustName(typ, p.Name, p.Qualifiers),
 		Version:    typeAdjustVersion(typ, p.Version),
-		Qualifiers: typeAdjustQualifiers(typ, p.Qualifiers),
+		Qualifiers: p.Qualifiers,
 		Subpath:    subpath,
 	}
 	return validCustomRules(*p)
 }
 
-// escape the given string in a purl-compatible way.
-func escape(s string) string {
-	// for compatibility with other implementations and the purl-spec, we want to escape all
-	// characters, which is what "QueryEscape" does. The issue with QueryEscape is that it encodes
-	// " " (space) as "+", which is valid in a query, but invalid in a path (see
-	// https://stackoverflow.com/questions/2678551/when-should-space-be-encoded-to-plus-or-20) for
-	// context).
-	// To work around that, we replace the "+" signs with the path-compatible "%20".
-	return strings.ReplaceAll(url.QueryEscape(s), "+", "%20")
+// percentDecode percent-decodes a purl component according to [Encoding].
+//
+// [Encoding] https://github.com/package-url/purl-spec/blob/main/PURL-SPECIFICATION.rst#character-encoding
+func percentDecode(s string) (string, error) {
+	// Note: uses [url.PathUnescape] instead of [url.QueryUnescape] to treat '+' characters
+	// literally (not as space).
+	return url.PathUnescape(s)
 }
 
-// escapeToBuilder escapes a string in purl-compatible way and writes it to the builder.
-// This is more efficient than escape() when building a larger string.
-func escapeToBuilder(b *strings.Builder, s string) {
+// writePercentEncodedString percent-encodes s as a purl path segment and writes it to the builder.
+func writePercentEncodedString(b *strings.Builder, s string) {
 	// Check if we need to escape at all
 	needsEscape := false
 	for i := 0; i < len(s); i++ {
-		if !isPurlSafe(s[i]) {
+		if !isPathSegmentSafe(s[i]) {
 			needsEscape = true
 			break
 		}
@@ -602,20 +604,28 @@ func escapeToBuilder(b *strings.Builder, s string) {
 	// Need to escape - process character by character
 	for i := 0; i < len(s); i++ {
 		c := s[i]
-		if isPurlSafe(c) {
+		if isPathSegmentSafe(c) {
 			b.WriteByte(c)
 		} else {
-			b.WriteByte('%')
-			b.WriteByte(hexUpper[c>>4])
-			b.WriteByte(hexUpper[c&0x0f])
+			writePercentEncodedByte(b, c)
 		}
 	}
 }
 
-// isPurlSafe reports whether c can appear unencoded in a purl path segment.
+// writePercentEncodedByte percent-encodes the given byte as per [RFC-3986] and writes the result to
+// the supplied [strings.Builder].
+//
+// [RFC-3986]: https://datatracker.ietf.org/doc/html/rfc3986#page-12
+func writePercentEncodedByte(b *strings.Builder, c byte) {
+	b.WriteByte('%')
+	b.WriteByte(hexUpper[c>>4])
+	b.WriteByte(hexUpper[c&0x0f])
+}
+
+// isPathSegmentSafe reports whether c can appear unencoded in a purl path segment.
 // This includes RFC 3986 unreserved characters, most sub-delimiters, and ":"
 // but excludes "@" (purl version separator) and "+" (must be encoded per purl spec).
-func isPurlSafe(c byte) bool {
+func isPathSegmentSafe(c byte) bool {
 	// unreserved: A-Z a-z 0-9 - . _ ~
 	// sub-delims (excluding +): ! $ & ' ( ) * , ; =
 	// also allowed in pchar: :
@@ -637,17 +647,15 @@ func escapeSubpath(b *strings.Builder, s string) {
 		} else if isSubpathSafe(c) {
 			b.WriteByte(c)
 		} else {
-			b.WriteByte('%')
-			b.WriteByte(hexUpper[c>>4])
-			b.WriteByte(hexUpper[c&0x0f])
+			writePercentEncodedByte(b, c)
 		}
 	}
 }
 
 // isSubpathSafe reports whether c can appear unencoded in a purl subpath segment.
-// This is similar to isPurlSafe but '+' must be encoded in subpaths.
+// This is similar to isPathSegmentSafe but '+' must be encoded in subpaths.
 func isSubpathSafe(c byte) bool {
-	// Same as isPurlSafe but '+' is NOT safe in subpath
+	// Same as isPathSegmentSafe but '+' is NOT safe in subpath
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
 		c == '-' || c == '.' || c == '_' || c == '~' ||
 		c == '!' || c == '$' || c == '&' || c == '\'' ||
@@ -657,37 +665,75 @@ func isSubpathSafe(c byte) bool {
 
 const hexUpper = "0123456789ABCDEF"
 
-func separateNamespaceNameVersion(path string) (ns, name, version string, err error) {
-	name = path
-
-	if namespaceSep := strings.LastIndex(name, "/"); namespaceSep != -1 {
-		ns, name = name[:namespaceSep], name[namespaceSep+1:]
-
-		ns, err = url.PathUnescape(ns)
-		if err != nil {
-			return "", "", "", fmt.Errorf("error unescaping namespace: %w", err)
-		}
+// separateNamespaceNameVersion parses the <namespace>/<name>@<version> part of a purl (the
+// remainder parameter) into its constituent components. It aims to follow the [HOW-TO-PARSE]
+// procedure.
+//
+// [HOW-TO-PARSE]: https://github.com/package-url/purl-spec/blob/main/docs/how-to-parse.md
+func separateNamespaceNameVersion(purlType string, remainder string) (ns, name, version string, err error) {
+	// NPM purls can have a namespace ("scope") that starts with an '@' character.
+	// For example, "pkg:npm/@babel/core".
+	// For any other purl type this indicates malformed purl input.
+	if purlType != TypeNPM && strings.HasPrefix(remainder, "@") {
+		return "", "", "", fmt.Errorf("purl is missing name")
 	}
 
-	if versionSep := strings.LastIndex(name, "@"); versionSep != -1 {
-		name, version = name[:versionSep], name[versionSep+1:]
-
-		version, err = url.PathUnescape(version)
+	// Split the remainder once from right on '@'.
+	// The left side is the remainder.
+	if strings.LastIndex(remainder, "@") > 0 {
+		remainder, version = rightmostSplit(remainder, "@")
+		// Percent-decode the right side. This is the version.
+		version, err = percentDecode(version)
 		if err != nil {
 			return "", "", "", fmt.Errorf("error unescaping version: %w", err)
 		}
 	}
 
-	name, err = url.PathUnescape(name)
+	// Split this once from right on '/'.
+	// The left side is the remainder.
+	remainder, name = rightmostSplit(remainder, "/")
+	// Percent-decode the right side. This is the name.
+	name, err = percentDecode(name)
 	if err != nil {
 		return "", "", "", fmt.Errorf("error unescaping name: %w", err)
 	}
+
+	// Split the remainder on '/'.
+	segments := strings.Split(remainder, "/")
+	nsSegments := []string{}
+	for _, segment := range segments {
+		// Discard any empty segment from that split.
+		if segment == "" {
+			continue
+		}
+		// Percent-decode each segment.
+		nsSegment, err := percentDecode(segment)
+		if err != nil {
+			return "", "", "", fmt.Errorf("error unescaping namespace: %w", err)
+		}
+		nsSegments = append(nsSegments, nsSegment)
+	}
+	// Join segments back with a '/'.
+	ns = strings.Join(nsSegments, "/")
 
 	if name == "" {
 		return "", "", "", fmt.Errorf("purl is missing name")
 	}
 
 	return ns, name, version, nil
+}
+
+// rightmostSplit splits the input path on a given delimiter such that the lhs returns the string to
+// the left of the right-most delimiter and rhs return the string to the right of the right-most
+// delimiter. For example, given path "github.com/package-url/packageurl-go" and delimiter "/" the
+// lhs will be "github.com/package-url" and rhs will be "packageurl-go".
+func rightmostSplit(path string, delim string) (lhs, rhs string) {
+	lastSepIdx := strings.LastIndex(path, delim)
+	rhs = path[lastSepIdx+1:]
+	if lastSepIdx >= 0 {
+		lhs = path[:lastSepIdx]
+	}
+	return lhs, rhs
 }
 
 func parseQualifiers(rawQuery string) (Qualifiers, error) {
@@ -705,25 +751,21 @@ func parseQualifiers(rawQuery string) (Qualifiers, error) {
 		if key == "" {
 			continue
 		}
+		// The key is the lowercase left side.
 		key, value, _ := strings.Cut(key, "=")
-		key, err := url.QueryUnescape(key)
-		if err != nil {
-			return nil, fmt.Errorf("error unescaping qualifier key %q", key)
-		}
+		key = strings.ToLower(key)
 
 		if !validQualifierKey(key) {
 			return nil, fmt.Errorf("invalid qualifier key: '%s'", key)
 		}
 
-		value, err = url.QueryUnescape(value)
+		// The value is the percent-decoded right side.
+		value, err := percentDecode(value)
 		if err != nil {
 			return nil, fmt.Errorf("error unescaping qualifier value %q", value)
 		}
 
-		q = append(q, Qualifier{
-			Key:   strings.ToLower(key),
-			Value: value,
-		})
+		q = append(q, Qualifier{Key: key, Value: value})
 	}
 	return q, nil
 }
@@ -755,6 +797,7 @@ func typeAdjustName(purlType, name string, qualifiers Qualifiers) string {
 		TypeApk,
 		TypeBitbucket,
 		TypeBitnami,
+		TypeChromeExtension,
 		TypeComposer,
 		TypeDebian,
 		TypeGithub,
@@ -776,11 +819,6 @@ func typeAdjustVersion(purlType, version string) string {
 		return strings.ToLower(version)
 	}
 	return version
-}
-
-// Make any purl type-specific adjustments to qualifiers.
-func typeAdjustQualifiers(_ string, qualifiers Qualifiers) Qualifiers {
-	return qualifiers
 }
 
 // https://github.com/package-url/purl-spec/blob/master/PURL-TYPES.rst#mlflow
@@ -805,6 +843,7 @@ func adjustMlflowName(name string, qualifiers map[string]string) string {
 // validQualifierKey validates a qualifierKey against our QualifierKeyPattern.
 // The key must be composed only of ASCII letters and numbers, '.', '-' and '_'.
 // A key cannot start with a number.
+// See https://ecma-tc54.github.io/ECMA-427/#sec-purl-specification-rules-qualifiers.
 func validQualifierKey(key string) bool {
 	if len(key) == 0 {
 		return false
@@ -827,6 +866,7 @@ func validQualifierKey(key string) bool {
 // validType validates a type against our TypePattern.
 // The type must be composed only of ASCII letters and numbers, '.', '+' and '-'.
 // A type cannot start with a number.
+// See https://ecma-tc54.github.io/ECMA-427/#sec-purl-specification-rules-type.
 func validType(typ string) bool {
 	if len(typ) == 0 {
 		return false
@@ -846,64 +886,91 @@ func validType(typ string) bool {
 	return true
 }
 
+// validChromeExtensionName checks the name against ^[a-z]{32}$.
+func validChromeExtensionName(name string) bool {
+	if len(name) != 32 {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		if c := name[i]; c < 'a' || c > 'z' {
+			return false
+		}
+	}
+	return true
+}
+
+// validChromeExtensionVersion checks the version against ^\d+(\.\d+){0,3}$.
+func validChromeExtensionVersion(version string) bool {
+	segments := 1
+	digitsInSegment := 0
+	for i := 0; i < len(version); i++ {
+		c := version[i]
+		if c >= '0' && c <= '9' {
+			digitsInSegment++
+			continue
+		}
+		if c == '.' {
+			if digitsInSegment == 0 {
+				return false
+			}
+			segments++
+			digitsInSegment = 0
+			continue
+		}
+		return false
+	}
+	return digitsInSegment > 0 && segments <= 4
+}
+
 // validCustomRules evaluates additional rules for each package url type, as specified in the package-url specification.
 // On success, it returns nil. On failure, a descriptive error will be returned.
 func validCustomRules(p PackageURL) error {
-	q := p.Qualifiers.Map()
 	switch p.Type {
-	case TypeConan:
-		// Conan user and channel qualifiers must appear together.
-		_, hasUser := q["user"]
-		_, hasChannel := q["channel"]
-		if hasUser && !hasChannel {
-			return errors.New("conan purl with 'user' qualifier must also have 'channel' qualifier")
+	case TypeChromeExtension:
+		if p.Namespace != "" {
+			return errors.New("a chrome-extension purl must not have a namespace")
 		}
-		if hasChannel && !hasUser {
-			// channel without user: check if namespace is present to serve as the "user"
-			if p.Namespace == "" {
-				return errors.New("conan purl with 'channel' qualifier requires 'user' qualifier or namespace")
-			}
+		if !validChromeExtensionName(p.Name) {
+			return errors.New("a chrome-extension name must be 32 lowercase ASCII letters")
 		}
-		// If namespace is present but no qualifiers at all, it's ambiguous/invalid.
-		if p.Namespace != "" && len(p.Qualifiers) == 0 {
-			return errors.New("conan purl with namespace requires qualifiers (at minimum 'channel')")
+		if p.Version != "" && !validChromeExtensionVersion(p.Version) {
+			return errors.New("a chrome-extension version must be 1 to 4 dot-separated integers")
 		}
 	case TypeCpan:
-		// CPAN namespace (author/publisher) is required.
+		// It MUST be written uppercase and is required.
 		if p.Namespace == "" {
-			return errors.New("a cpan purl must have a namespace (the CPAN ID of the author/publisher)")
+			return errors.New("a cpan purl must have a namespace")
 		}
-		// Namespace must be uppercase.
-		if p.Namespace != strings.ToUpper(p.Namespace) {
-			return errors.New("a cpan namespace must be all uppercase")
+		if strings.ToUpper(p.Namespace) != p.Namespace {
+			return errors.New("a cpan purl namespace must use uppercase characters")
 		}
-		// Name must not contain '::' (that's module syntax, not distribution).
-		if strings.Contains(p.Name, "::") {
+
+		// A distribution name MUST NOT contain the string '::'.
+		distName := p.Name
+		if strings.Contains(distName, "::") {
 			return errors.New("a cpan distribution name must not contain '::'")
 		}
 	case TypeJulia:
-		// Julia requires a uuid qualifier.
-		if _, ok := q["uuid"]; !ok {
-			return errors.New("a julia purl must have a 'uuid' qualifier")
+		// The spec prohibits a namespace.
+		if p.Namespace != "" {
+			return errors.New("a julia purl must not have a namespace")
+		}
+		// The spec requires the presence of a uuid qualifier.
+		if _, ok := p.Qualifiers.Map()["uuid"]; !ok {
+			return errors.New("a julia purl must have a uuid qualifier")
+		}
+	case TypeOTP:
+		// The spec prohibits a namespace.
+		if p.Namespace != "" {
+			return errors.New("an otp purl must not have a namespace")
 		}
 	case TypeSwift:
 		if p.Namespace == "" {
 			return errors.New("namespace is required")
 		}
-		if p.Version == "" {
-			return errors.New("version is required")
-		}
-	case TypeCran:
-		if p.Version == "" {
-			return errors.New("version is required")
-		}
-	case TypeOTP:
-		if p.Namespace != "" {
-			return errors.New("namespace is not allowed for otp purls")
-		}
 	case TypeVSCodeExtension:
 		if p.Namespace == "" {
-			return errors.New("namespace is required for vscode-extension purls")
+			return errors.New("namespace is required")
 		}
 	}
 	return nil
