@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/git-pkgs/registries/safehttp"
 )
 
 const (
@@ -216,4 +218,43 @@ func NewClient(opts ...Option) *Client {
 		opt(c)
 	}
 	return c
+}
+
+// WithHTTPClient swaps in a caller-supplied *http.Client. Use this
+// when the application has its own connection pool, mTLS config, or
+// auth-injecting transport that other Options like WithTimeout can't
+// express. The supplied client's Timeout, Jar, and Transport are
+// preserved as-is.
+func WithHTTPClient(h *http.Client) Option {
+	return func(c *Client) {
+		c.HTTPClient = h
+	}
+}
+
+// WithTransport replaces the underlying http.RoundTripper without
+// touching the Client's other settings (timeout, jar, etc.). Useful
+// for wrapping the transport in middleware (auth, logging, retry,
+// rate-limit) while keeping the rest of the configured shape intact.
+func WithTransport(rt http.RoundTripper) Option {
+	return func(c *Client) {
+		if c.HTTPClient == nil {
+			c.HTTPClient = &http.Client{Timeout: defaultTimeout}
+		}
+		c.HTTPClient.Transport = rt
+	}
+}
+
+// WithSafeHTTP wraps the client's underlying *http.Client with the
+// safehttp transport: dial-time IP gate (rejects loopback, RFC1918,
+// CGNAT, link-local, multicast, unspecified), redirect chain capped
+// at 10, non-http(s) schemes rejected on redirect. DNS is resolved at
+// dial time and the connection dials the resolved IP directly so a
+// rebind between resolve and connect cannot escape the gate. Suitable
+// for any code path that fetches from URLs an attacker might control
+// (a malicious registry response, a manifest-supplied URL, a redirect
+// target).
+func WithSafeHTTP() Option {
+	return func(c *Client) {
+		c.HTTPClient = safehttp.New(c.HTTPClient, safehttp.Options{})
+	}
 }
