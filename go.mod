@@ -6,7 +6,7 @@ toolchain go1.26.3
 
 require (
 	github.com/Masterminds/semver v1.5.0
-	github.com/git-pkgs/registries v0.5.1
+	github.com/git-pkgs/registries v0.6.0
 	github.com/google/go-containerregistry v0.21.5
 	github.com/spf13/cobra v1.10.2
 )
