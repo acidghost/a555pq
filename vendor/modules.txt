@@ -18,7 +18,7 @@ github.com/git-pkgs/pom
 # github.com/git-pkgs/purl v0.1.12
 ## explicit; go 1.25.6
 github.com/git-pkgs/purl
-# github.com/git-pkgs/registries v0.6.0
+# github.com/git-pkgs/registries v0.6.1
 ## explicit; go 1.25.6
 github.com/git-pkgs/registries
 github.com/git-pkgs/registries/all
@@ -51,13 +51,13 @@ github.com/git-pkgs/registries/internal/rubygems
 github.com/git-pkgs/registries/internal/terraform
 github.com/git-pkgs/registries/internal/urlparser
 github.com/git-pkgs/registries/safehttp
-# github.com/git-pkgs/spdx v0.1.3
+# github.com/git-pkgs/spdx v0.1.4
 ## explicit; go 1.25.6
 github.com/git-pkgs/spdx
-# github.com/git-pkgs/vers v0.2.5
+# github.com/git-pkgs/vers v0.2.6
 ## explicit; go 1.25.6
 github.com/git-pkgs/vers
-# github.com/github/go-spdx/v2 v2.6.0
+# github.com/github/go-spdx/v2 v2.7.0
 ## explicit; go 1.24
 github.com/github/go-spdx/v2/spdxexp
 github.com/github/go-spdx/v2/spdxexp/spdxlicenses
