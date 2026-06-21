@@ -7,12 +7,12 @@ toolchain go1.26.4
 require (
 	github.com/Masterminds/semver v1.5.0
 	github.com/git-pkgs/registries v0.6.1
-	github.com/google/go-containerregistry v0.21.6
+	github.com/google/go-containerregistry v0.21.7
 	github.com/spf13/cobra v1.10.2
 )
 
 require (
-	github.com/docker/cli v29.4.3+incompatible // indirect
+	github.com/docker/cli v29.5.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.6 // indirect
 	github.com/git-pkgs/pom v0.1.4 // indirect
 	github.com/git-pkgs/purl v0.1.12 // indirect
@@ -26,7 +26,7 @@ require (
 	github.com/package-url/packageurl-go v0.1.6 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
-	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.44.0 // indirect
+	golang.org/x/sync v0.21.0 // indirect
+	golang.org/x/sys v0.46.0 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
 )
