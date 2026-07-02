@@ -6,7 +6,7 @@ toolchain go1.26.4
 
 require (
 	github.com/Masterminds/semver v1.5.0
-	github.com/git-pkgs/registries v0.6.1
+	github.com/git-pkgs/registries v0.6.2
 	github.com/google/go-containerregistry v0.21.7
 	github.com/spf13/cobra v1.10.2
 )
@@ -14,7 +14,7 @@ require (
 require (
 	github.com/docker/cli v29.5.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.6 // indirect
-	github.com/git-pkgs/pom v0.1.4 // indirect
+	github.com/git-pkgs/pom v0.1.5 // indirect
 	github.com/git-pkgs/purl v0.1.12 // indirect
 	github.com/git-pkgs/spdx v0.1.4 // indirect
 	github.com/git-pkgs/vers v0.2.6 // indirect
