@@ -8,6 +8,8 @@ ldflags := '-s -w -X main.buildVersion='+version \
         +' -X main.buildCommit='+commit_sha \
         +' -X main.buildDate='+build_time
 
+install_prefix := `go env GOBIN`
+
 goos := if os() == 'macos' { 'darwin' } else { os() }
 goarch := if arch() == 'aarch64' { 'arm64' } else if arch() == 'x86_64' { 'amd64' } else { arch() }
 
@@ -36,13 +38,13 @@ fmt:
     go fmt ./...
 
 lint:
-	golangci-lint run
+    golangci-lint run
 
 test *args:
-	go test -v {{args}} ./...
+    go test -v {{args}} ./...
 
 install: build
-    cp -v './build/{{program}}-{{goos}}-{{goarch}}' "$(go env GOBIN)/{{program}}"
+    cp -v './build/{{program}}-{{goos}}-{{goarch}}' "{{install_prefix}}/{{program}}"
 
 clean:
     rm -rf build
