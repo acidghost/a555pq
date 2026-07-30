@@ -2,6 +2,7 @@ package registry
 
 import (
 	"context"
+	"time"
 
 	"github.com/acidghost/a555pq/cmd/shared"
 	"github.com/acidghost/a555pq/internal/formatter"
@@ -10,7 +11,9 @@ import (
 )
 
 func newVersionsCmd(ecosystem string) *cobra.Command {
-	return &cobra.Command{
+	var minReleaseAge time.Duration
+
+	cmd := &cobra.Command{
 		Use:   "versions <package>",
 		Short: "Show all versions of a package",
 		Args:  cobra.ExactArgs(1),
@@ -20,7 +23,8 @@ func newVersionsCmd(ecosystem string) *cobra.Command {
 				return err
 			}
 
-			output, err := client.Versions(context.Background(), args[0])
+			options := registry.Options{MinReleaseAge: minReleaseAge}
+			output, err := client.Versions(context.Background(), args[0], options)
 			if err != nil {
 				return err
 			}
@@ -35,4 +39,12 @@ func newVersionsCmd(ecosystem string) *cobra.Command {
 			return f.Format(output)
 		},
 	}
+
+	cmd.Flags().VarP(
+		shared.NewTimespanValue(&minReleaseAge),
+		"min-release-age",
+		"",
+		"filter out versions released within this timespan (e.g. 7d, 6mo, 1y); ecosystems without release timestamps are unaffected",
+	)
+	return cmd
 }

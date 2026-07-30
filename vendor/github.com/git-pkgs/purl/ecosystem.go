@@ -29,13 +29,18 @@ var osvEcosystemNames = map[string]string{
 	"npm":           "npm",
 	"pypi":          "PyPI",
 	"cargo":         "crates.io",
+	"conan":         "ConanCenter",
+	"cran":          "CRAN",
 	"golang":        "Go",
+	"hackage":       "Hackage",
 	ecosystemMaven:  "Maven",
+	"julia":         "Julia",
 	"nuget":         "NuGet",
+	"opam":          "opam",
 	"composer":      "Packagist",
 	"hex":           "Hex",
 	"pub":           "Pub",
-	"cocoapods":     "CocoaPods",
+	"swift":         "SwiftURL",
 	"githubactions": "GitHub Actions",
 }
 
@@ -96,6 +101,18 @@ func EcosystemToOSV(ecosystem string) string {
 		return osv
 	}
 	return ecosystem
+}
+
+// PURLTypeToOSV converts a PURL type to the OSV ecosystem name and reports
+// whether the type is one OSV recognises. Unlike EcosystemToOSV, it takes the
+// PURL type directly (skipping the ecosystem-name normalisation when the
+// caller already has a parsed PURL) and returns ok=false on a miss rather
+// than passing the input through, so callers that emit OSV records can fall
+// back to a GIT range instead of writing an ecosystem the OSV schema will
+// reject.
+func PURLTypeToOSV(purlType string) (string, bool) {
+	osv, ok := osvEcosystemNames[purlType]
+	return osv, ok
 }
 
 // PURLTypeToDepsdev converts a PURL type to the deps.dev system name.
