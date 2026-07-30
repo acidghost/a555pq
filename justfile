@@ -1,7 +1,7 @@
 program := 'a555pq'
 
 version := 'SNAPSHOT-'+`git describe --tags --always --dirty 2>/dev/null || printf 'unknown'`
-commit_sha := `(git rev-parse HEAD 2>/dev/null || printf 'unknown') | tr -d '\n'`
+commit_sha := `(git rev-parse --verify HEAD 2>/dev/null || printf 'unknown') | tr -d '\n'`
 build_time := `date -u '+%Y-%m-%d_%H:%M:%S'`
 
 ldflags := '-s -w -X main.buildVersion='+version \
@@ -21,6 +21,7 @@ build-all: (build 'darwin' 'arm64') (build 'linux' 'arm64') (build 'linux' 'amd6
 build os=goos arch=goarch: build-dir
     CGO_ENABLED=0 GOOS={{os}} GOARCH={{arch}} \
         go build \
+            -trimpath \
             -ldflags '{{ldflags}}' \
             -o build/{{program}}-{{os}}-{{arch}}
 
@@ -29,6 +30,9 @@ build-dir:
 
 run *args: build
     ./build/{{program}}-{{goos}}-{{goarch}} {{args}}
+
+actions-lint *args:
+    actionlint -verbose {{args}}
 
 vendor:
     go mod tidy

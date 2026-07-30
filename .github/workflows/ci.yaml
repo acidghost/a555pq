@@ -33,6 +33,7 @@ jobs:
         with:
           version: ${{ env.MISE_VERSION }}
 
+      - run: just actions-lint
       - run: just lint
       - run: just build
       - run: just run --help
