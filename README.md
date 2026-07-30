@@ -37,6 +37,30 @@ Available commands:
 - `browse <package>` - Open package page in browser
 - `version` - Display build metadata
 
+### Filtering by Release Age
+
+The `versions`, `latest`, and `show` commands of registry-backed ecosystems
+(npm, PyPI, cargo, gem, maven, nuget, golang, and most others) accept a
+`--min-release-age` flag that filters out versions released within the given
+timespan. This is useful for avoiding freshly published releases.
+
+```bash
+# List chalk versions older than 1 year
+a555pq npm versions chalk --min-release-age 1y
+
+# Get the newest version of lodash that is at least 30 days old
+a555pq npm latest lodash --min-release-age 30d
+```
+
+Supported units (case-insensitive): `y` (years), `mo` (months), `w` (weeks),
+`d` (days), `h` (hours), `m` (minutes), `s` (seconds), `ms` (milliseconds).
+Units can be combined, e.g. `1w2d` or `1d6h`. Years and months are
+approximated as 365 and 30 days respectively.
+
+Some ecosystems do not publish release timestamps (e.g. deno, terraform,
+haxelib, julia, luarocks, nimble). For those the flag has no effect and all
+versions are returned.
+
 ### GitHub Authentication
 
 The GitHub commands support two authentication methods:
