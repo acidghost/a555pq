@@ -1,0 +1,4 @@
+* @acidghost
+
+# Release authorization and publication policy must be reviewed explicitly.
+/.github/workflows/release.yaml @acidghost

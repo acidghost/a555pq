@@ -1,0 +1,247 @@
+name: Publish Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+env:
+  # renovate: datasource=github-releases depName=jdx/mise
+  MISE_VERSION: 2026.7.11
+
+jobs:
+  metadata:
+    name: Validate release metadata
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Validate tag and normalize version
+        id: version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          [[ "$REF_TYPE" == "tag" ]] || {
+            echo "Release ref must be a tag" >&2
+            exit 1
+          }
+          semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?$'
+          [[ "$TAG" =~ $semver ]] || {
+            echo "Tag must be strict SemVer of the form vMAJOR.MINOR.PATCH[-PRERELEASE]: $TAG" >&2
+            exit 1
+          }
+          version="${TAG#v}"
+          [[ "$version" != "0.0.0" ]] || {
+            echo "0.0.0 is a development placeholder and must never be published" >&2
+            exit 1
+          }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Require a GitHub-verified signed annotated tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          ref="$(gh api "repos/${GH_REPO}/git/ref/tags/${TAG}")"
+          [[ "$(jq -r '.object.type' <<<"$ref")" == "tag" ]] || {
+            echo "Release tag must be annotated, not lightweight" >&2
+            exit 1
+          }
+          tag_object="$(jq -r '.object.sha' <<<"$ref")"
+          tag="$(gh api "repos/${GH_REPO}/git/tags/${tag_object}")"
+          [[ "$(jq -r '.verification.verified' <<<"$tag")" == "true" ]] || {
+            echo "Release tag signature is not verified by GitHub" >&2
+            jq -r '.verification.reason' <<<"$tag" >&2
+            exit 1
+          }
+          [[ "$(jq -r '.object.type' <<<"$tag")" == "commit" ]] || {
+            echo "Release tag must point directly to a commit" >&2
+            exit 1
+          }
+          [[ "$(jq -r '.object.sha' <<<"$tag")" == "$SHA" ]] || {
+            echo "Release tag target does not match the workflow commit" >&2
+            exit 1
+          }
+
+      - name: Checkout main for ancestry validation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: main
+
+      - name: Require the release commit to be on main
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$SHA" HEAD || {
+            echo "Release commit $SHA is not reachable from main" >&2
+            exit 1
+          }
+
+  build:
+    name: Build and attest release
+    needs: metadata
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Setup mise
+        uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4.2.1
+        with:
+          version: ${{ env.MISE_VERSION }}
+          cache: false
+
+      - name: Test
+        run: just test
+
+      - name: Build exact release version
+        env:
+          SHA: ${{ github.sha }}
+          VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+          source_date_epoch="$(git show -s --format=%ct "$SHA")"
+          build_date="$(date -u -d "@${source_date_epoch}" '+%Y-%m-%d_%H:%M:%S')"
+          just \
+            "version=${VERSION}" \
+            "commit_sha=${SHA}" \
+            "build_time=${build_date}" \
+            build-all
+          ./build/a555pq-linux-amd64 version | tee version.txt
+          grep -Fx "Version: ${VERSION}" version.txt
+          grep -Fx "Commit:  ${SHA}" version.txt
+          echo "SOURCE_DATE_EPOCH=${source_date_epoch}" >> "$GITHUB_ENV"
+
+      - name: Package release archives and checksums
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for binary in build/a555pq-*; do
+            platform="${binary#build/a555pq-}"
+            staging="$(mktemp -d)"
+            install -m 0755 "$binary" "$staging/a555pq"
+            touch -d "@${SOURCE_DATE_EPOCH}" "$staging/a555pq"
+            tar \
+              --sort=name \
+              --mtime="@${SOURCE_DATE_EPOCH}" \
+              --owner=0 \
+              --group=0 \
+              --numeric-owner \
+              -C "$staging" \
+              -czf "dist/a555pq_${VERSION}_${platform}.tar.gz" \
+              a555pq
+            rm -rf "$staging"
+          done
+          (
+            cd dist
+            sha256sum -- *.tar.gz > SHA256SUMS
+          )
+
+      - name: Attest release archives
+        id: attest
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-checksums: dist/SHA256SUMS
+
+      - name: Include the attestation bundle
+        env:
+          BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
+          VERSION: ${{ needs.metadata.outputs.version }}
+        run: cp "$BUNDLE_PATH" "dist/a555pq_${VERSION}.intoto.jsonl"
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  github-release:
+    name: Create GitHub release
+    needs: [metadata, build]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      attestations: read
+      contents: write
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release
+          path: build
+
+      - name: Verify checksums and provenance
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          (cd build && sha256sum --check SHA256SUMS)
+          for archive in build/*.tar.gz; do
+            [[ "$(tar -tzf "$archive")" == "a555pq" ]]
+            gh attestation verify "$archive" \
+              --repo "$GH_REPO" \
+              --signer-workflow "$GH_REPO/.github/workflows/release.yaml" \
+              --source-ref "refs/tags/${TAG}" \
+              --source-digest "$SHA" \
+              --deny-self-hosted-runners
+          done
+
+      - name: Create immutable release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; refusing to modify it."
+            exit 0
+          fi
+          args=(
+            --target "$SHA"
+            --verify-tag
+            --generate-notes
+            --title "$TAG"
+          )
+          if [[ "$VERSION" == *-* ]]; then
+            args+=(--prerelease)
+          fi
+          mapfile -t artifacts < <(find build -maxdepth 1 -type f -print | sort)
+          gh release create "$TAG" "${artifacts[@]}" "${args[@]}"

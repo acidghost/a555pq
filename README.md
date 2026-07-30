@@ -1,6 +1,6 @@
 # a555pq
 
-[![CI](https://github.com/acidghost/a555pq/actions/workflows/ci.yml/badge.svg)](https://github.com/acidghost/a555pq/actions/workflows/ci.yml)
+[![CI](https://github.com/acidghost/a555pq/actions/workflows/ci.yaml/badge.svg)](https://github.com/acidghost/a555pq/actions/workflows/ci.yaml)
 
 A CLI tool to query package information from various package managers like PyPI, npm, and container registries.
 
@@ -9,6 +9,10 @@ A CLI tool to query package information from various package managers like PyPI,
 ```bash
 go install github.com/acidghost/a555pq@latest
 ```
+
+Versioned archives for Linux (`amd64`, `arm64`) and macOS (`arm64`) are also
+available from [GitHub Releases](https://github.com/acidghost/a555pq/releases).
+Each release includes SHA-256 checksums and signed build provenance.
 
 Or build from source:
 
@@ -138,4 +142,67 @@ just run pypi show requests
 - Vendor dependencies: `just vendor` (runs `go mod tidy` and `go mod vendor`)
 - Clean build artifacts: `just clean`
 - Install binary to GOPATH/bin: `just install`
+- Lint GitHub Actions: `just actions-lint`
 - List all commands: `just help`
+
+## Releases and supply-chain verification
+
+A GitHub-verified signed annotated tag is the release source of truth. Tags must
+use strict SemVer with a leading `v`; prereleases such as `v0.2.0-rc.1` are
+supported. Merge the intended changes to `main`, wait for required CI, then tag
+the exact commit:
+
+```sh
+git tag -s v0.1.0 -m 'a555pq v0.1.0'
+git push origin v0.1.0
+```
+
+The release workflow rejects lightweight or unverified tags, tags not reachable
+from `main`, malformed versions, and `v0.0.0`. It builds with an exact version,
+commit, and commit-derived timestamp, runs tests, creates deterministic archives
+and checksums, and signs GitHub artifact attestations before the `release`
+environment can publish the immutable GitHub Release. Prerelease tags produce
+GitHub prereleases.
+
+Configure these repository controls before the first release:
+
+1. Protect `main`, require pull requests and the CI check, and require CODEOWNERS
+   review for workflow changes.
+2. Create a tag ruleset for `v*` that restricts creation to release maintainers
+   and blocks tag updates and deletion.
+3. Create a `release` environment restricted to `v*` tags, add required
+   reviewers, and prevent administrators from bypassing its protection rules
+   where practical.
+4. Enable immutable GitHub Releases in the repository settings.
+5. Keep the repository's default workflow token permission read-only. The
+   workflow grants write access only to its attestation and publication jobs.
+
+Release tags and attached artifacts are immutable. If a run fails after an
+artifact is published, inspect the commit and attestation and complete only the
+missing publication; never move a release tag or replace an existing artifact.
+
+After downloading an archive and `SHA256SUMS`, verify both its checksum and its
+keyless GitHub Actions provenance:
+
+```sh
+VERSION=v0.1.0
+ARCHIVE=a555pq_0.1.0_linux-amd64.tar.gz
+
+gh release download "$VERSION" \
+  --repo acidghost/a555pq \
+  --pattern "$ARCHIVE" \
+  --pattern SHA256SUMS
+# Linux:
+sha256sum --check --ignore-missing SHA256SUMS
+# macOS:
+shasum -a 256 --check --ignore-missing SHA256SUMS
+
+gh attestation verify "$ARCHIVE" \
+  --repo acidghost/a555pq \
+  --signer-workflow acidghost/a555pq/.github/workflows/release.yaml \
+  --source-ref "refs/tags/$VERSION" \
+  --deny-self-hosted-runners
+```
+
+The `.intoto.jsonl` file attached to each release is the corresponding
+attestation bundle for offline retention.
