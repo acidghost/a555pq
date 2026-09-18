@@ -12,14 +12,14 @@ github.com/docker/cli/cli/config/types
 ## explicit; go 1.21
 github.com/docker/docker-credential-helpers/client
 github.com/docker/docker-credential-helpers/credentials
-# github.com/git-pkgs/pom v0.1.5
+# github.com/git-pkgs/pom v0.1.7
 ## explicit; go 1.25.6
 github.com/git-pkgs/pom
-# github.com/git-pkgs/purl v0.1.15
-## explicit; go 1.25.6
+# github.com/git-pkgs/purl v0.1.20
+## explicit; go 1.26.0
 github.com/git-pkgs/purl
-# github.com/git-pkgs/registries v0.6.4
-## explicit; go 1.25.6
+# github.com/git-pkgs/registries v0.9.1
+## explicit; go 1.26.0
 github.com/git-pkgs/registries
 github.com/git-pkgs/registries/all
 github.com/git-pkgs/registries/client
@@ -36,6 +36,7 @@ github.com/git-pkgs/registries/internal/elm
 github.com/git-pkgs/registries/internal/golang
 github.com/git-pkgs/registries/internal/hackage
 github.com/git-pkgs/registries/internal/haxelib
+github.com/git-pkgs/registries/internal/helm
 github.com/git-pkgs/registries/internal/hex
 github.com/git-pkgs/registries/internal/homebrew
 github.com/git-pkgs/registries/internal/julia
@@ -51,11 +52,11 @@ github.com/git-pkgs/registries/internal/rubygems
 github.com/git-pkgs/registries/internal/terraform
 github.com/git-pkgs/registries/internal/urlparser
 github.com/git-pkgs/registries/safehttp
-# github.com/git-pkgs/spdx v0.1.4
+# github.com/git-pkgs/spdx v0.3.1
 ## explicit; go 1.25.6
 github.com/git-pkgs/spdx
-# github.com/git-pkgs/vers v0.3.0
-## explicit; go 1.25.6
+# github.com/git-pkgs/vers v0.7.0
+## explicit; go 1.26
 github.com/git-pkgs/vers
 # github.com/github/go-spdx/v2 v2.7.0
 ## explicit; go 1.24
@@ -107,7 +108,7 @@ github.com/opencontainers/go-digest
 ## explicit; go 1.18
 github.com/opencontainers/image-spec/specs-go
 github.com/opencontainers/image-spec/specs-go/v1
-# github.com/package-url/packageurl-go v0.1.6
+# github.com/package-url/packageurl-go v0.1.7
 ## explicit; go 1.18
 github.com/package-url/packageurl-go
 # github.com/sirupsen/logrus v1.9.4
@@ -119,6 +120,9 @@ github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.10
 ## explicit; go 1.12
 github.com/spf13/pflag
+# go.yaml.in/yaml/v3 v3.0.5
+## explicit; go 1.16
+go.yaml.in/yaml/v3
 # golang.org/x/sync v0.22.0
 ## explicit; go 1.25.0
 golang.org/x/sync/errgroup
