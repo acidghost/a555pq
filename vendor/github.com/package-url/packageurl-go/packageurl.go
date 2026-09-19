@@ -115,6 +115,8 @@ var (
 	TypeSWID = "swid"
 	// TypeSwift is a pkg:swift purl.
 	TypeSwift = "swift"
+	// TypeVcpkg is a pkg:vcpkg purl.
+	TypeVcpkg = "vcpkg"
 	// TypeVSCodeExtension is a pkg:vscode-extension purl.
 	TypeVSCodeExtension = "vscode-extension"
 	// TypeYocto is a pkg:yocto purl.
@@ -156,6 +158,7 @@ var (
 		TypeRPM:             {},
 		TypeSWID:            {},
 		TypeSwift:           {},
+		TypeVcpkg:           {},
 		TypeVSCodeExtension: {},
 		TypeYocto:           {},
 	}
@@ -503,7 +506,13 @@ func FromString(purl string) (PackageURL, error) {
 	// Extract fragment (subpath)
 	var subpath string
 	if idx := strings.IndexByte(remainder, '#'); idx != -1 {
-		subpath = remainder[idx+1:]
+		// A subpath is a percent-encoded string and must be decoded like the
+		// other components (namespace, name, version).
+		decoded, err := percentDecodeSubpath(remainder[idx+1:])
+		if err != nil {
+			return PackageURL{}, fmt.Errorf("error unescaping subpath: %w", err)
+		}
+		subpath = decoded
 		remainder = remainder[:idx]
 	}
 
@@ -586,6 +595,24 @@ func percentDecode(s string) (string, error) {
 	return url.PathUnescape(s)
 }
 
+// percentDecodeSubpath percent-decodes a subpath by decoding each '/'-separated
+// segment on its own, so an encoded slash inside a segment is not treated as a
+// segment separator. This mirrors the per-segment decoding done for the namespace.
+func percentDecodeSubpath(s string) (string, error) {
+	if !strings.Contains(s, "%") {
+		return s, nil
+	}
+	segments := strings.Split(s, "/")
+	for i, segment := range segments {
+		decoded, err := percentDecode(segment)
+		if err != nil {
+			return "", err
+		}
+		segments[i] = decoded
+	}
+	return strings.Join(segments, "/"), nil
+}
+
 // writePercentEncodedString percent-encodes s as a purl path segment and writes it to the builder.
 func writePercentEncodedString(b *strings.Builder, s string) {
 	// Check if we need to escape at all
@@ -623,44 +650,29 @@ func writePercentEncodedByte(b *strings.Builder, c byte) {
 }
 
 // isPathSegmentSafe reports whether c can appear unencoded in a purl path segment.
-// This includes RFC 3986 unreserved characters, most sub-delimiters, and ":"
-// but excludes "@" (purl version separator) and "+" (must be encoded per purl spec).
+// Per the purl spec, the only characters that must NOT be percent-encoded are:
+// alphanumerics, the unreserved punctuation '-', '.', '_', '~', and ':'.
+// All other characters — including RFC 3986 sub-delimiters such as '(', ')', '!',
+// '$', '&', "'", '*', ',', ';', '=' — must be percent-encoded.
+//
+// See https://ecma-tc54.github.io/ECMA-427/#sec-purl-specification-character-encoding
 func isPathSegmentSafe(c byte) bool {
-	// unreserved: A-Z a-z 0-9 - . _ ~
-	// sub-delims (excluding +): ! $ & ' ( ) * , ; =
-	// also allowed in pchar: :
-	// NOT safe: @ (purl version separator), + (must be %2B), / ? # (URL structure)
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
-		c == '-' || c == '.' || c == '_' || c == '~' ||
-		c == '!' || c == '$' || c == '&' || c == '\'' ||
-		c == '(' || c == ')' || c == '*' ||
-		c == ',' || c == ';' || c == '=' || c == ':'
+		c == '-' || c == '.' || c == '_' || c == '~' || c == ':'
 }
 
 // escapeSubpath escapes a subpath, handling segments separated by '/'.
-// In subpaths, '+' must be encoded as %2B (unlike in path segments).
 func escapeSubpath(b *strings.Builder, s string) {
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		if c == '/' {
 			b.WriteByte('/')
-		} else if isSubpathSafe(c) {
+		} else if isPathSegmentSafe(c) {
 			b.WriteByte(c)
 		} else {
 			writePercentEncodedByte(b, c)
 		}
 	}
-}
-
-// isSubpathSafe reports whether c can appear unencoded in a purl subpath segment.
-// This is similar to isPathSegmentSafe but '+' must be encoded in subpaths.
-func isSubpathSafe(c byte) bool {
-	// Same as isPathSegmentSafe but '+' is NOT safe in subpath
-	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
-		c == '-' || c == '.' || c == '_' || c == '~' ||
-		c == '!' || c == '$' || c == '&' || c == '\'' ||
-		c == '(' || c == ')' || c == '*' ||
-		c == ',' || c == ';' || c == '=' || c == ':'
 }
 
 const hexUpper = "0123456789ABCDEF"
@@ -675,6 +687,13 @@ func separateNamespaceNameVersion(purlType string, remainder string) (ns, name, 
 	// For example, "pkg:npm/@babel/core".
 	// For any other purl type this indicates malformed purl input.
 	if purlType != TypeNPM && strings.HasPrefix(remainder, "@") {
+		return "", "", "", fmt.Errorf("purl is missing name")
+	}
+	// A leading '@' is only valid for npm when it introduces a scope, which
+	// requires a '/' to separate the scope from the name (for example,
+	// "pkg:npm/@babel/core"). A remainder like "@4.17.21" has no '/', so it is a
+	// bare scope with no name and must be rejected the same way as v0.1.3 did.
+	if purlType == TypeNPM && strings.HasPrefix(remainder, "@") && !strings.Contains(remainder, "/") {
 		return "", "", "", fmt.Errorf("purl is missing name")
 	}
 
@@ -777,6 +796,7 @@ func typeAdjustNamespace(purlType, ns string) string {
 	case TypeAlpm,
 		TypeApk,
 		TypeBitbucket,
+		TypeBrew,
 		TypeComposer,
 		TypeDebian,
 		TypeGithub,
@@ -797,6 +817,7 @@ func typeAdjustName(purlType, name string, qualifiers Qualifiers) string {
 		TypeApk,
 		TypeBitbucket,
 		TypeBitnami,
+		TypeBrew,
 		TypeChromeExtension,
 		TypeComposer,
 		TypeDebian,
@@ -824,16 +845,15 @@ func typeAdjustVersion(purlType, version string) string {
 // https://github.com/package-url/purl-spec/blob/master/PURL-TYPES.rst#mlflow
 func adjustMlflowName(name string, qualifiers map[string]string) string {
 	if repo, ok := qualifiers["repository_url"]; ok {
-		if strings.Contains(repo, "azureml") {
-			// Azure ML is case-sensitive and must be kept as-is
-			return name
-		} else if strings.Contains(repo, "databricks") {
+		if strings.Contains(repo, "databricks") {
 			// Databricks is case-insensitive and must be lowercased
 			return strings.ToLower(name)
-		} else {
-			// Unknown repository type, keep as-is
-			return name
 		}
+
+		// Azure ML is case-sensitive and must be kept as-is
+		// Unknown repository type, keep as-is
+		return name
+
 	} else {
 		// No repository qualifier given, keep as-is
 		return name
@@ -937,10 +957,7 @@ func validCustomRules(p PackageURL) error {
 			return errors.New("a chrome-extension version must be 1 to 4 dot-separated integers")
 		}
 	case TypeCpan:
-		// It MUST be written uppercase and is required.
-		if p.Namespace == "" {
-			return errors.New("a cpan purl must have a namespace")
-		}
+		// It MUST be written uppercase.
 		if strings.ToUpper(p.Namespace) != p.Namespace {
 			return errors.New("a cpan purl namespace must use uppercase characters")
 		}
@@ -967,6 +984,10 @@ func validCustomRules(p PackageURL) error {
 	case TypeSwift:
 		if p.Namespace == "" {
 			return errors.New("namespace is required")
+		}
+	case TypeVcpkg:
+		if p.Namespace != "" {
+			return errors.New("a vcpkg purl must not have a namespace")
 		}
 	case TypeVSCodeExtension:
 		if p.Namespace == "" {

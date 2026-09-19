@@ -46,7 +46,36 @@ fmt.Println(expr.String())  // "MIT OR (GPL-2.0-only AND Apache-2.0)"
 // ParseStrict requires valid SPDX IDs (no fuzzy normalization)
 expr, err := spdx.ParseStrict("MIT OR Apache-2.0")  // succeeds
 expr, err := spdx.ParseStrict("Apache 2 OR MIT")    // fails
+
+// ParseSyntax validates expression grammar without requiring identifiers
+// to exist in the SPDX list bundled by this module
+expr, err := spdx.ParseSyntax("Future-License-1.0 OR MIT") // succeeds
 ```
+
+`ParseSyntax` is useful when the caller validates identifiers against another
+pinned data source. Known identifiers are returned in their canonical form,
+while well-formed unknown license and exception identifiers are preserved.
+`ParseStrict` continues to require identifiers from the bundled SPDX list.
+
+### Rewrite expression identifiers
+
+Parse an expression once, then replace its identifiers while keeping its
+operators and precedence:
+
+```go
+expr, err := spdx.ParseStrict(
+    "MIT OR GPL-2.0-only WITH Classpath-exception-2.0",
+)
+rewritten := spdx.RewriteIdentifiers(expr, func(id string) string {
+    return strings.ToLower(id)
+})
+fmt.Println(rewritten)
+// "mit OR (gpl-2.0-only WITH classpath-exception-2.0)"
+```
+
+The callback receives license identifiers, exception identifiers, and complete
+`LicenseRef` or `DocumentRef` values in expression order. Replacement values
+are not validated as SPDX identifiers.
 
 ### Validate licenses
 

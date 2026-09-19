@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/git-pkgs/purl"
 	"github.com/git-pkgs/registries/internal/core"
 )
 
@@ -51,15 +52,15 @@ func (r *Registry) URLs() core.URLBuilder { //nolint:ireturn
 }
 
 type packageResponse struct {
-	ID          string                     `json:"_id"`
-	Name        string                     `json:"name"`
-	Description string                     `json:"description"`
-	Homepage    interface{}                `json:"homepage"`
-	Repository  interface{}                `json:"repository"`
-	Versions    map[string]versionInfo     `json:"versions"`
-	Time        map[string]string          `json:"time"`
-	Maintainers []maintainerInfo           `json:"maintainers"`
-	DistTags    map[string]string          `json:"dist-tags"`
+	ID          string                 `json:"_id"`
+	Name        string                 `json:"name"`
+	Description string                 `json:"description"`
+	Homepage    interface{}            `json:"homepage"`
+	Repository  interface{}            `json:"repository"`
+	Versions    map[string]versionInfo `json:"versions"`
+	Time        map[string]string      `json:"time"`
+	Maintainers []maintainerInfo       `json:"maintainers"`
+	DistTags    map[string]string      `json:"dist-tags"`
 }
 
 type versionInfo struct {
@@ -79,6 +80,17 @@ type versionInfo struct {
 	NpmUser      map[string]interface{} `json:"_npmUser"`
 	Engines      interface{}            `json:"engines"`
 	Funding      interface{}            `json:"funding"`
+
+	ContentPolicy *ContentPolicy `json:"contentPolicy"`
+}
+
+// ContentPolicy is the npm package.json "contentPolicy" field, propagated
+// into the packument version object. Maintainers set it to declare
+// dual-use content (security-relevant capabilities that automated
+// scanning could otherwise flag as malicious). See
+// https://docs.npmjs.com/policies/dual-use.
+type ContentPolicy struct {
+	Class string `json:"class"` // "dual-use" is the only value npm defines today
 }
 
 // deprecatedField is the npm version "deprecated" field, which the packument
@@ -231,13 +243,14 @@ func (r *Registry) FetchVersions(ctx context.Context, name string) ([]core.Versi
 			Integrity:   integrity,
 			Status:      status,
 			Metadata: map[string]any{
-				"deprecated":       string(v.Deprecated),
-				"dist":             v.Dist,
-				"engines":          v.Engines,
-				"_npmUser":         v.NpmUser,
-				"tarball":          v.Dist.Tarball,
-				"npm:attestations": v.Dist.Attestations,
-				"npm:signatures":   v.Dist.Signatures,
+				"deprecated":        string(v.Deprecated),
+				"dist":              v.Dist,
+				"engines":           v.Engines,
+				"_npmUser":          v.NpmUser,
+				"tarball":           v.Dist.Tarball,
+				"npm:attestations":  v.Dist.Attestations,
+				"npm:signatures":    v.Dist.Signatures,
+				"npm:contentPolicy": v.ContentPolicy,
 			},
 		})
 	}
@@ -392,23 +405,5 @@ func (u *URLs) Documentation(name, version string) string {
 }
 
 func (u *URLs) PURL(name, version string) string {
-	namespace := ""
-	pkgName := name
-	if strings.HasPrefix(name, "@") && strings.Contains(name, "/") {
-		parts := strings.SplitN(name, "/", 2) //nolint:mnd // scope/name split
-		namespace = parts[0]
-		pkgName = parts[1]
-	}
-
-	if namespace != "" {
-		if version != "" {
-			return fmt.Sprintf("pkg:npm/%s/%s@%s", namespace, pkgName, version)
-		}
-		return fmt.Sprintf("pkg:npm/%s/%s", namespace, pkgName)
-	}
-
-	if version != "" {
-		return fmt.Sprintf("pkg:npm/%s@%s", pkgName, version)
-	}
-	return fmt.Sprintf("pkg:npm/%s", pkgName)
+	return purl.BuildPURLString(ecosystem, name, version, "")
 }

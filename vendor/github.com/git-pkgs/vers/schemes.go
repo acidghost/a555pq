@@ -1,16 +1,16 @@
 package vers
 
 import (
-	"regexp"
 	"strings"
 )
 
 type semverValue struct {
-	core []string
-	pre  []string
+	core [3]string
+	pre  string
 }
 
 func compareSemver(a, b string) int {
+	a, b = strings.TrimSpace(a), strings.TrimSpace(b)
 	va, okA := parseSemverValue(a)
 	vb, okB := parseSemverValue(b)
 	if !okA || !okB {
@@ -21,33 +21,238 @@ func compareSemver(a, b string) int {
 			return c
 		}
 	}
-	return compareSemverPrerelease(va.pre, vb.pre)
+	return compareSemverPrereleaseStrings(va.pre, vb.pre)
+}
+
+func compareCargo(a, b string) int {
+	a, b = strings.TrimSpace(a), strings.TrimSpace(b)
+	comparison := compareSemver(a, b)
+	if comparison != 0 {
+		return comparison
+	}
+	return compareCargoBuild(semverBuild(a), semverBuild(b))
+}
+
+func semverBuild(version string) string {
+	if index := strings.IndexByte(version, '+'); index >= 0 {
+		return version[index+1:]
+	}
+	return ""
+}
+
+func compareCargoBuild(a, b string) int {
+	if a == b {
+		return 0
+	}
+	if a == "" {
+		return -1
+	}
+	if b == "" {
+		return 1
+	}
+
+	left := strings.Split(a, ".")
+	right := strings.Split(b, ".")
+	for index := 0; index < len(left) && index < len(right); index++ {
+		if comparison := compareCargoBuildIdentifier(left[index], right[index]); comparison != 0 {
+			return comparison
+		}
+	}
+	return cmpInt(len(left), len(right))
+}
+
+func compareCargoBuildIdentifier(a, b string) int {
+	aNumeric, bNumeric := isDigits(a), isDigits(b)
+	if aNumeric != bNumeric {
+		if aNumeric {
+			return -1
+		}
+		return 1
+	}
+	if !aNumeric {
+		return cmpString(a, b)
+	}
+	left, right := trimLeadingZeros(a), trimLeadingZeros(b)
+	if comparison := cmpInt(len(left), len(right)); comparison != 0 {
+		return comparison
+	}
+	if comparison := cmpString(left, right); comparison != 0 {
+		return comparison
+	}
+	return cmpInt(len(a), len(b))
+}
+
+func compareGo(a, b string) int {
+	if !strings.HasPrefix(a, "v") && !strings.HasPrefix(b, "v") {
+		return compareSemver(a, b)
+	}
+	left, leftOK := parseGoVersion(a)
+	right, rightOK := parseGoVersion(b)
+	if !leftOK || !rightOK {
+		switch {
+		case leftOK:
+			return 1
+		case rightOK:
+			return -1
+		default:
+			return 0
+		}
+	}
+	for index := range left.core {
+		if comparison := cmpNumStr(left.core[index], right.core[index]); comparison != 0 {
+			return comparison
+		}
+	}
+	return compareSemverPrereleaseStrings(left.pre, right.pre)
+}
+
+func parseGoVersion(version string) (semverValue, bool) {
+	if len(version) < 2 || version[0] != 'v' {
+		return semverValue{}, false
+	}
+	version = version[1:]
+	coreEnd := strings.IndexAny(version, "-+")
+	if coreEnd < 0 {
+		coreEnd = len(version)
+	}
+	core := strings.Split(version[:coreEnd], ".")
+	if len(core) > 3 || !validGoCore(core) {
+		return semverValue{}, false
+	}
+	if len(core) < 3 && coreEnd != len(version) {
+		return semverValue{}, false
+	}
+	for len(core) < 3 {
+		core = append(core, "0")
+	}
+
+	parsed := semverValue{core: [3]string{core[0], core[1], core[2]}}
+	remainder := version[coreEnd:]
+	if strings.HasPrefix(remainder, "-") {
+		remainder = remainder[1:]
+		preEnd := strings.IndexByte(remainder, '+')
+		if preEnd < 0 {
+			preEnd = len(remainder)
+		}
+		parsed.pre = remainder[:preEnd]
+		if !validGoIdentifiers(parsed.pre, false) {
+			return semverValue{}, false
+		}
+		remainder = remainder[preEnd:]
+	}
+	if strings.HasPrefix(remainder, "+") {
+		if !validGoIdentifiers(remainder[1:], true) {
+			return semverValue{}, false
+		}
+		remainder = ""
+	}
+	return parsed, remainder == ""
+}
+
+func validGoCore(parts []string) bool {
+	if len(parts) == 0 {
+		return false
+	}
+	for _, part := range parts {
+		if !isDigits(part) || len(part) > 1 && part[0] == '0' {
+			return false
+		}
+	}
+	return true
+}
+
+func validGoIdentifiers(value string, build bool) bool {
+	if value == "" {
+		return false
+	}
+	for _, identifier := range strings.Split(value, ".") {
+		if identifier == "" || !validGoIdentifier(identifier) {
+			return false
+		}
+		if !build && len(identifier) > 1 && identifier[0] == '0' && isDigits(identifier) {
+			return false
+		}
+	}
+	return true
+}
+
+func validGoIdentifier(identifier string) bool {
+	for index := range len(identifier) {
+		character := identifier[index]
+		if !isASCIIAlnum(character) && character != '-' {
+			return false
+		}
+	}
+	return true
 }
 
 func parseSemverValue(s string) (semverValue, bool) {
-	m := SemanticVersionRegex.FindStringSubmatch(s)
-	if m == nil {
-		return semverValue{}, false
+	var v semverValue
+	i := 0
+	if i < len(s) && s[i] == 'v' {
+		i++
 	}
-	v := semverValue{core: []string{m[1], m[2], m[3]}}
-	if m[4] != "" {
-		v.pre = strings.Split(m[4], ".")
+
+	for part := 0; part < len(v.core); part++ {
+		start := i
+		for i < len(s) && isASCIIDigit(s[i]) {
+			i++
+		}
+		if i == start {
+			return semverValue{}, false
+		}
+		v.core[part] = s[start:i]
+
+		if i >= len(s) || s[i] != '.' {
+			break
+		}
+		if part == len(v.core)-1 {
+			return semverValue{}, false
+		}
+		i++
+	}
+
+	if i < len(s) && s[i] == '-' {
+		start := i + 1
+		i = start
+		for i < len(s) && s[i] != '+' {
+			i++
+		}
+		if i == start {
+			return semverValue{}, false
+		}
+		v.pre = s[start:i]
+	}
+
+	if i < len(s) && s[i] == '+' {
+		i++
+		if i == len(s) || strings.IndexByte(s[i:], '\n') >= 0 {
+			return semverValue{}, false
+		}
+		i = len(s)
+	}
+
+	if i != len(s) {
+		return semverValue{}, false
 	}
 	return v, true
 }
 
-func compareSemverPrerelease(a, b []string) int {
-	if len(a) == 0 && len(b) == 0 {
+func compareSemverPrereleaseStrings(a, b string) int {
+	if a == "" && b == "" {
 		return 0
 	}
-	if len(a) == 0 {
+	if a == "" {
 		return 1
 	}
-	if len(b) == 0 {
+	if b == "" {
 		return -1
 	}
-	for i := 0; i < len(a) && i < len(b); i++ {
-		aNum, bNum := isDigits(a[i]), isDigits(b[i])
+
+	for {
+		aPart, aRest, aMore := nextDotPart(a)
+		bPart, bRest, bMore := nextDotPart(b)
+		aNum, bNum := isDigits(aPart), isDigits(bPart)
 		if aNum != bNum {
 			if aNum {
 				return -1
@@ -56,15 +261,36 @@ func compareSemverPrerelease(a, b []string) int {
 		}
 		var c int
 		if aNum {
-			c = cmpNumStr(a[i], b[i])
+			c = cmpNumStr(aPart, bPart)
 		} else {
-			c = cmpString(a[i], b[i])
+			c = cmpString(aPart, bPart)
 		}
 		if c != 0 {
 			return c
 		}
+		if !aMore || !bMore {
+			return cmpInt(boolInt(aMore), boolInt(bMore))
+		}
+		a, b = aRest, bRest
 	}
-	return cmpInt(len(a), len(b))
+}
+
+// nextDotPart splits the leading dot separated component off s. more reports
+// whether another component follows, which lets callers walk two versions in
+// lockstep without materializing either component list.
+func nextDotPart(s string) (part, rest string, more bool) {
+	i := strings.IndexByte(s, '.')
+	if i < 0 {
+		return s, "", false
+	}
+	return s[:i], s[i+1:], true
+}
+
+func boolInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
 }
 
 type gemSegment struct {
@@ -72,24 +298,73 @@ type gemSegment struct {
 	num   bool
 }
 
-var gemSegmentRegex = regexp.MustCompile(`[0-9]+|[A-Za-z]+`)
+const commonGemSegments = 8
 
 func compareGem(a, b string) int {
-	return compareGemSegments(parseGemSegments(a), parseGemSegments(b))
+	var aBuffer, bBuffer [commonGemSegments]gemSegment
+	return compareGemSegments(
+		parseGemSegments(aBuffer[:0], a),
+		parseGemSegments(bBuffer[:0], b),
+	)
 }
 
 func parseGemRawSegments(s string) []gemSegment {
-	s = strings.ReplaceAll(strings.TrimSpace(s), "-", ".pre.")
-	raw := gemSegmentRegex.FindAllString(s, -1)
-	parts := make([]gemSegment, 0, len(raw))
-	for _, part := range raw {
-		parts = append(parts, gemSegment{value: part, num: isDigits(part)})
+	s = strings.TrimSpace(s)
+	parts := make([]gemSegment, 0, countGemSegments(s))
+	return appendGemSegments(parts, s)
+}
+
+func countGemSegments(s string) int {
+	count := 0
+	for i := 0; i < len(s); {
+		switch {
+		case s[i] == '-':
+			count++
+			i++
+		case isASCIIDigit(s[i]):
+			count++
+			for i < len(s) && isASCIIDigit(s[i]) {
+				i++
+			}
+		case isASCIIAlpha(s[i]):
+			count++
+			for i < len(s) && isASCIIAlpha(s[i]) {
+				i++
+			}
+		default:
+			i++
+		}
+	}
+	return count
+}
+
+func appendGemSegments(parts []gemSegment, s string) []gemSegment {
+	for i := 0; i < len(s); {
+		switch {
+		case s[i] == '-':
+			parts = append(parts, gemSegment{value: qualifierPre})
+			i++
+		case isASCIIDigit(s[i]):
+			start := i
+			for i < len(s) && isASCIIDigit(s[i]) {
+				i++
+			}
+			parts = append(parts, gemSegment{value: s[start:i], num: true})
+		case isASCIIAlpha(s[i]):
+			start := i
+			for i < len(s) && isASCIIAlpha(s[i]) {
+				i++
+			}
+			parts = append(parts, gemSegment{value: s[start:i]})
+		default:
+			i++
+		}
 	}
 	return parts
 }
 
-func parseGemSegments(s string) []gemSegment {
-	parts := parseGemRawSegments(s)
+func parseGemSegments(parts []gemSegment, s string) []gemSegment {
+	parts = appendGemSegments(parts, strings.TrimSpace(s))
 
 	firstAlpha := -1
 	for i, part := range parts {

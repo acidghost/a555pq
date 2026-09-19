@@ -1,6 +1,6 @@
 # registries
 
-Go library for fetching package metadata from registry APIs. Supports 25 ecosystems with a unified interface. Also provides sub-packages for HTTP client usage (`client/`) and streaming artifact downloads (`fetch/`).
+Go library for fetching package metadata from registry APIs. Supports 26 ecosystems with a unified interface. Also provides sub-packages for HTTP client usage (`client/`) and streaming artifact downloads (`fetch/`).
 
 ## Installation
 
@@ -62,10 +62,16 @@ for _, m := range maintainers {
     fmt.Printf("%s <%s>\n", m.Login, m.Email)
 }
 
-// Fetch latest non-yanked version
+// Fetch the registry-advertised latest version, with an active-release fallback
 latest, err := registries.FetchLatestVersionFromPURL(ctx, "pkg:cargo/serde", nil)
 fmt.Println(latest.Number)      // e.g., "1.0.197"
 fmt.Println(latest.PublishedAt)
+
+// Apply the same policy to versions fetched elsewhere
+cargoPackage, err := registries.FetchPackageFromPURL(ctx, "pkg:cargo/serde", nil)
+cargoRegistry, cargoName, _, err := registries.NewFromPURL("pkg:cargo/serde", nil)
+cargoVersions, err := cargoRegistry.FetchVersions(ctx, cargoName)
+latest = registries.SelectLatestVersion(cargoVersions, cargoRegistry.Ecosystem(), cargoPackage.LatestVersion)
 
 // Parse a PURL to get the registry client
 reg, name, version, err := registries.NewFromPURL("pkg:pypi/requests@2.31.0", nil)
@@ -182,6 +188,7 @@ import _ "github.com/git-pkgs/registries/all"
 | LuaRocks | `luarocks` | https://luarocks.org |
 | Nimble | `nimble` | https://nimble.directory |
 | Haxelib | `haxelib` | https://lib.haxe.org |
+| Helm | `helm` | URL required |
 | Homebrew | `brew` | https://formulae.brew.sh |
 | Deno | `deno` | https://apiland.deno.dev |
 | Terraform | `terraform` | https://registry.terraform.io |
@@ -351,6 +358,44 @@ io.Copy(dst, artifact.Body)
 
 The fetcher uses DNS caching (5-minute refresh), connection pooling, and a 5-minute timeout suited for large artifacts. It retries on rate limits and server errors with exponential backoff and jitter.
 
+### Observing artifact responses
+
+Use `FetchObserved` when the response metadata and downloaded content digests need to be retained:
+
+```go
+artifact, err := f.FetchObserved(ctx, url)
+if err != nil {
+    log.Fatal(err)
+}
+defer artifact.Body.Close()
+
+if _, err := io.Copy(dst, artifact.Body); err != nil {
+    log.Fatal(err)
+}
+if !artifact.Observation.Complete {
+    log.Fatal("artifact body did not reach EOF")
+}
+
+sharedArtifact, err := artifact.Observation.Artifact(
+    "pkg:npm/lodash@4.17.21",
+    "lodash-4.17.21.tgz",
+)
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Println(artifact.Observation.RequestedURL)
+fmt.Println(artifact.Observation.FinalURL)
+fmt.Println(artifact.Observation.ByteCount)
+fmt.Println(artifact.Observation.Digests["sha256"])
+fmt.Println(sharedArtifact.PURL)
+fmt.Println(sharedArtifact.Digest)
+```
+
+The observation includes the time to receive the final response headers, status, declared size, media type, and an allow-list of response headers: `Accept-Ranges`, `Cache-Control`, `Content-Disposition`, `Content-Encoding`, `Content-Length`, `Content-Range`, `Digest`, `ETag`, `Expires`, and `Last-Modified`. SHA-256 and SHA-512 digests use lowercase hexadecimal encoding. Byte counts and digests remain unset until the stream reaches EOF, so a partial download cannot appear complete. Request and authentication headers are not copied into the observation.
+
+After EOF, `FetchObservation.Artifact` converts the SHA-256 digest, byte count, and media type into an `artifacts.Artifact`. The caller supplies the package URL and filename. The conversion rejects incomplete observations and missing or malformed SHA-256 digests.
+
 ### Per-request headers
 
 Use `FetchWithHeaders` to pass HTTP headers for a single request. This is useful when the auth token varies per request or is obtained dynamically (e.g. Docker Hub token exchange):
@@ -379,7 +424,7 @@ When both `WithAuthFunc` and `FetchWithHeaders` set the same header, `WithAuthFu
 
 ### Circuit breaker
 
-Wrap a fetcher with per-host circuit breakers to avoid hammering a failing registry. The breaker trips after 5 consecutive failures and resets with exponential backoff (30s initial, 5min max).
+Wrap a fetcher with per-host circuit breakers to avoid hammering a failing registry. The breaker trips once 5 failures land inside its rolling 10 second failure window, then retries with exponential backoff (30s initial, 5min max). While it is open, one request per backoff interval is let through as a probe and the rest fail with `ErrUpstreamDown` without contacting the registry; a probe that succeeds closes the breaker again. Retries never give up, so a breaker recovers no matter how long the registry stayed down.
 
 ```go
 f := fetch.NewFetcher()
