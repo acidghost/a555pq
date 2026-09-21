@@ -43,6 +43,11 @@ r, _ = vers.ParseNative("~1.2.3", "npm")
 r, _ = vers.ParseNative("1.0.0 - 2.0.0", "npm")
 r, _ = vers.ParseNative(">=1.0.0 <2.0.0", "npm")
 
+// Composer: caret, tilde, wildcard, hyphen, AND and OR ranges
+r, _ = vers.ParseNative("^1.2.3", "composer")
+r, _ = vers.ParseNative("~1.2", "composer")
+r, _ = vers.ParseNative(">=1.0 <1.1 || >=1.2", "composer")
+
 // Ruby gems: pessimistic operator
 r, _ = vers.ParseNative("~> 1.2", "gem")
 r, _ = vers.ParseNative(">= 1.0, < 2.0", "gem")
@@ -50,6 +55,11 @@ r, _ = vers.ParseNative(">= 1.0, < 2.0", "gem")
 // Python: compatible release, exclusions
 r, _ = vers.ParseNative("~=1.4.2", "pypi")
 r, _ = vers.ParseNative(">=1.0.0,<2.0.0,!=1.5.0", "pypi")
+r, _ = vers.ParseNative("==2.32.4", "pypi")
+
+// Pub: caret and traditional intersection syntax
+r, _ = vers.ParseNative("^1.2.3", "pub")
+r, _ = vers.ParseNative(">=1.2.3 <2.0.0", "pub")
 
 // Maven/NuGet: bracket notation
 r, _ = vers.ParseNative("[1.0,2.0)", "maven")
@@ -114,6 +124,20 @@ vers.ValidWithScheme("1:2.3.4-1", "deb") // true
 v, _ = vers.NormalizeWithScheme("01!02.0RC1", "pypi") // "1!2.0rc1"
 ```
 
+### Find a Baseline Version and Repository Tags
+
+`MinimumVersion` returns an inclusive lower bound only when that exact version
+is part of the range. `TagCandidates` trims surrounding whitespace, preserves
+the remaining spelling, adds its scheme-normalized form, and tries the common
+optional `v` prefix.
+
+```go
+r, _ := vers.ParseNative("^1.2", "npm")
+baseline, ok := r.MinimumVersion() // "1.2", true
+tags, _ := vers.TagCandidates(baseline, "npm")
+// 1.2, v1.2, 1.2.0, v1.2.0
+```
+
 ### Create Ranges Programmatically
 
 ```go
@@ -138,6 +162,16 @@ union := r1.Union(r2)             // >=1.0.0 OR <2.0.0
 r = r.Exclude("1.5.0")
 ```
 
+### Detect Exact Ranges
+
+```go
+r, _ := vers.ParseNative("==2.32.4", "pypi")
+version, exact := r.ExactVersion() // "2.32.4", true
+
+r, _ = vers.ParseNative("^2.32.4", "npm")
+_, exact = r.ExactVersion() // false
+```
+
 ### Convert Back to VERS URI
 
 ```go
@@ -156,8 +190,10 @@ uri = vers.ToVersString(r, "npm")
 | Ecosystem | Scheme | Example Syntax |
 |-----------|--------|----------------|
 | npm | `npm` | `^1.2.3`, `~1.2.3`, `>=1.0.0 <2.0.0`, `1.x`, `1.0.0 - 2.0.0` |
+| Composer | `composer` | `^1.2.3`, `~1.2`, `1.2.*`, `>=1.0 <2.0`, `||` |
 | RubyGems | `gem`, `rubygems` | `~> 1.2`, `>= 1.0, < 2.0` |
 | PyPI | `pypi` | `~=1.4.2`, `>=1.0.0,<2.0.0`, `!=1.5.0` |
+| Pub | `pub` | `^1.2.3`, `>=1.2.3 <2.0.0`, `any` |
 | Maven | `maven` | `[1.0,2.0)`, `(1.0,2.0]`, `[1.0,)`, `[1.0]` |
 | NuGet | `nuget` | Same as Maven |
 | Cargo | `cargo` | Same as npm |
