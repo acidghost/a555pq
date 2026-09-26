@@ -29,6 +29,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -41,14 +42,22 @@ const (
 )
 
 // Options configures a safehttp client. The zero value gives the
-// production-strict gate; tests can opt parts of it off explicitly.
+// production-strict gate; tests and explicit operator allowlists can
+// opt parts of it off.
 type Options struct {
 	// AllowLoopback disables the loopback (127.0.0.0/8, ::1) check.
-	// Test-only; never set in production paths.
+	// Only set for tests or explicit operator allowlists.
 	AllowLoopback bool
 
-	// AllowPrivate disables the RFC1918 / ULA / CGNAT checks. Test-only.
+	// AllowPrivate disables the RFC1918 / ULA / CGNAT checks.
+	// Only set for tests or explicit operator allowlists.
 	AllowPrivate bool
+
+	// AllowPrivateHosts permits named hosts and IP literals to resolve or
+	// connect to RFC1918, ULA, or CGNAT addresses. Loopback and link-local
+	// addresses remain blocked. Host matching is case-insensitive and ignores
+	// ports and trailing dots.
+	AllowPrivateHosts []string
 }
 
 // testInsecure flips both AllowLoopback and AllowPrivate on at the
@@ -108,13 +117,50 @@ func CheckIP(ip net.IP, opts Options) error {
 	return newGate(opts).check(ip)
 }
 
+// CheckHostIP reports whether an IP is acceptable for the named host
+// under the supplied options. It applies AllowPrivateHosts in addition
+// to the checks performed by CheckIP. Use NewHostIPChecker when checking
+// multiple addresses with the same options.
+func CheckHostIP(host string, ip net.IP, opts Options) error {
+	return NewHostIPChecker(opts).Check(host, ip)
+}
+
+// HostIPChecker checks resolved IP addresses against a normalized host
+// allowlist. It can be reused across dials without rebuilding the allowlist.
+type HostIPChecker struct {
+	gate *ipGate
+}
+
+// NewHostIPChecker creates a reusable checker from opts.
+func NewHostIPChecker(opts Options) *HostIPChecker {
+	return &HostIPChecker{gate: newGate(opts)}
+}
+
+// Check reports whether ip is acceptable for host.
+func (c *HostIPChecker) Check(host string, ip net.IP) error {
+	return c.gate.checkHost(host, ip)
+}
+
 type ipGate struct {
-	allowLoopback bool
-	allowPrivate  bool
+	allowLoopback     bool
+	allowPrivate      bool
+	allowPrivateHosts map[string]bool
 }
 
 func newGate(opts Options) *ipGate {
-	return &ipGate{allowLoopback: opts.AllowLoopback, allowPrivate: opts.AllowPrivate}
+	g := &ipGate{
+		allowLoopback: opts.AllowLoopback,
+		allowPrivate:  opts.AllowPrivate,
+	}
+	if len(opts.AllowPrivateHosts) > 0 {
+		g.allowPrivateHosts = make(map[string]bool, len(opts.AllowPrivateHosts))
+		for _, host := range opts.AllowPrivateHosts {
+			if host = normalizeHost(host); host != "" {
+				g.allowPrivateHosts[host] = true
+			}
+		}
+	}
+	return g
 }
 
 func (g *ipGate) dial(ctx context.Context, network, addr string, dial func(context.Context, string, string) (net.Conn, error)) (net.Conn, error) {
@@ -124,7 +170,7 @@ func (g *ipGate) dial(ctx context.Context, network, addr string, dial func(conte
 	}
 
 	if ip := net.ParseIP(host); ip != nil {
-		if err := g.check(ip); err != nil {
+		if err := g.checkHost(host, ip); err != nil {
 			return nil, err
 		}
 		return dial(ctx, network, addr)
@@ -136,7 +182,7 @@ func (g *ipGate) dial(ctx context.Context, network, addr string, dial func(conte
 	}
 	var lastErr error
 	for _, ip := range ips {
-		if err := g.check(ip.IP); err != nil {
+		if err := g.checkHost(host, ip.IP); err != nil {
 			lastErr = err
 			continue
 		}
@@ -163,8 +209,12 @@ func mustCIDR(s string) *net.IPNet {
 }
 
 func (g *ipGate) check(ip net.IP) error {
+	return g.checkHost("", ip)
+}
+
+func (g *ipGate) checkHost(host string, ip net.IP) error {
 	allowLoopback := g.allowLoopback || testInsecure
-	allowPrivate := g.allowPrivate || testInsecure
+	allowPrivate := g.allowPrivate || g.allowPrivateHosts[normalizeHost(host)] || testInsecure
 
 	if ip.IsUnspecified() {
 		return blockedErr(ip, "unspecified")
@@ -187,6 +237,16 @@ func (g *ipGate) check(ip net.IP) error {
 		}
 	}
 	return nil
+}
+
+func normalizeHost(host string) string {
+	host = strings.TrimSpace(host)
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	} else if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+		host = host[1 : len(host)-1]
+	}
+	return strings.ToLower(strings.TrimSuffix(host, "."))
 }
 
 func blockedErr(ip net.IP, kind string) error {

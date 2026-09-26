@@ -6,13 +6,16 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 const (
 	schemeALPM          = "alpm"
 	schemeAlpine        = "alpine"
 	schemeAPK           = "apk"
+	schemeBazel         = "bazel"
 	schemeCargo         = "cargo"
+	schemeComposer      = "composer"
 	schemeConan         = "conan"
 	schemeDatetime      = "datetime"
 	schemeDeb           = "deb"
@@ -31,18 +34,17 @@ const (
 	schemeNuGet         = "nuget"
 	schemeOpenSSL       = "openssl"
 	schemePyPI          = "pypi"
+	schemePub           = "pub"
 	schemeRPM           = "rpm"
 	schemeRubyGems      = "rubygems"
 	schemeSemVer        = "semver"
 	qualifierAlpha      = "alpha"
 	qualifierBeta       = "beta"
+	qualifierPre        = "pre"
 )
 
 // SemanticVersionRegex matches semantic version strings (with optional v prefix).
 var SemanticVersionRegex = regexp.MustCompile(`^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-([^+]+))?(?:\+(.+))?$`)
-
-// simpleNumericRegex matches simple numeric versions like "1" or "42".
-var simpleNumericRegex = regexp.MustCompile(`^\d+$`)
 
 // versionCache caches parsed versions to avoid re-parsing the same strings.
 var versionCache = &boundedCache{
@@ -103,13 +105,13 @@ func ParseVersion(s string) (*VersionInfo, error) {
 func parseVersionUncached(s string) (*VersionInfo, error) {
 	v := &VersionInfo{Original: s}
 
-	if simpleNumericRegex.MatchString(s) {
+	if isDigits(s) {
 		v.Major, _ = strconv.Atoi(s)
 		return v, nil
 	}
 
-	if matches := SemanticVersionRegex.FindStringSubmatch(s); matches != nil {
-		return parseSemverMatches(v, matches), nil
+	if semver, ok := parseSemverValue(s); ok {
+		return parseSemverValueInfo(v, semver), nil
 	}
 
 	if strings.Contains(s, ".") {
@@ -128,18 +130,20 @@ func parseVersionUncached(s string) (*VersionInfo, error) {
 	return nil, fmt.Errorf("invalid version format: %s", s)
 }
 
-func parseSemverMatches(v *VersionInfo, matches []string) *VersionInfo {
-	if matches[1] != "" {
-		v.Major, _ = strconv.Atoi(matches[1])
+func parseSemverValueInfo(v *VersionInfo, semver semverValue) *VersionInfo {
+	if semver.core[0] != "" {
+		v.Major, _ = strconv.Atoi(semver.core[0])
 	}
-	if matches[2] != "" {
-		v.Minor, _ = strconv.Atoi(matches[2])
+	if semver.core[1] != "" {
+		v.Minor, _ = strconv.Atoi(semver.core[1])
 	}
-	if matches[3] != "" {
-		v.Patch, _ = strconv.Atoi(matches[3])
+	if semver.core[2] != "" {
+		v.Patch, _ = strconv.Atoi(semver.core[2])
 	}
-	v.Prerelease = matches[4]
-	v.Build = matches[5]
+	v.Prerelease = semver.pre
+	if i := strings.IndexByte(v.Original, '+'); i >= 0 {
+		v.Build = v.Original[i+1:]
+	}
 	return v
 }
 
@@ -290,8 +294,15 @@ func CompareVersions(a, b string) int {
 	if b == "" {
 		return 1
 	}
-	if SemanticVersionRegex.MatchString(a) && SemanticVersionRegex.MatchString(b) {
-		return compareSemver(a, b)
+	if va, ok := parseSemverValue(a); ok {
+		if vb, ok := parseSemverValue(b); ok {
+			for i := range va.core {
+				if c := cmpNumStr(va.core[i], vb.core[i]); c != 0 {
+					return c
+				}
+			}
+			return compareSemverPrereleaseStrings(va.pre, vb.pre)
+		}
 	}
 
 	va, errA := ParseVersion(a)
@@ -320,6 +331,9 @@ func CompareWithScheme(a, b, scheme string) int {
 	if a == b {
 		return 0
 	}
+	if scheme == schemeBazel || scheme == schemeGem || scheme == schemeRubyGems || scheme == schemeGo || scheme == schemeGolang {
+		return compareFuncFor(scheme)(a, b)
+	}
 	if a == "" {
 		return -1
 	}
@@ -333,8 +347,18 @@ func CompareWithScheme(a, b, scheme string) int {
 // compareFuncFor returns the version comparison function for a scheme.
 func compareFuncFor(scheme string) func(a, b string) int {
 	switch scheme {
-	case schemeSemVer, schemeNPM, schemeCargo, schemeGo, schemeGolang, schemeHex, schemeElixir, schemeNginx:
+	case schemeBazel:
+		return compareBazel
+	case schemeSemVer, schemeHex, schemeElixir, schemeNginx, schemeNPM:
 		return compareSemver
+	case schemeCargo:
+		return compareCargo
+	case schemeGo, schemeGolang:
+		return compareGo
+	case schemeComposer:
+		return compareComposer
+	case schemePub:
+		return comparePub
 	case schemeGem, schemeRubyGems:
 		return compareGem
 	case schemeDeb, schemeDebian:
@@ -347,14 +371,14 @@ func compareFuncFor(scheme string) func(a, b string) int {
 		return compareMaven
 	case schemePyPI:
 		return comparePyPI
-	case schemeLexicographic, schemeDatetime:
+	case schemeLexicographic:
 		return cmpString
+	case schemeDatetime:
+		return compareDatetime
 	case schemeIntDot:
 		return compareIntDot
 	case schemeAPK, schemeAlpine:
-		// This covers the vendored Alpine cases, but is not a full apk-tools
-		// implementation; APK has additional VCS suffix and letter rules.
-		return compareGentoo
+		return compareAPK
 	case schemeGentoo:
 		return compareGentoo
 	case schemeALPM:
@@ -366,6 +390,15 @@ func compareFuncFor(scheme string) func(a, b string) int {
 	default:
 		return CompareVersions
 	}
+}
+
+func compareDatetime(a, b string) int {
+	ta, errA := time.Parse(time.RFC3339Nano, a)
+	tb, errB := time.Parse(time.RFC3339Nano, b)
+	if errA != nil || errB != nil {
+		return cmpString(a, b)
+	}
+	return ta.Compare(tb)
 }
 
 func canonicalScheme(scheme string) string {
@@ -433,11 +466,16 @@ func parseNuGetVersion(s string) nugetVersion {
 		s = s[:idx]
 	}
 
-	// Parse numeric parts
-	parts := strings.Split(s, ".")
-	for i := 0; i < len(parts) && i < 4; i++ {
-		if isDigits(parts[i]) {
-			result.numeric[i] = parts[i]
+	// Parse numeric parts without allocating a temporary slice.
+	for i := 0; i < len(result.numeric) && s != ""; i++ {
+		part := s
+		if dot := strings.IndexByte(s, '.'); dot >= 0 {
+			part, s = s[:dot], s[dot+1:]
+		} else {
+			s = ""
+		}
+		if isDigits(part) {
+			result.numeric[i] = part
 		}
 	}
 
@@ -446,9 +484,7 @@ func parseNuGetVersion(s string) nugetVersion {
 
 func compareNuGetPrerelease(a, b string) int {
 	// NuGet prerelease comparison is SemVer 2 ordering, case-insensitive.
-	partsA := strings.Split(strings.ToLower(a), ".")
-	partsB := strings.Split(strings.ToLower(b), ".")
-	return compareSemverPrerelease(partsA, partsB)
+	return compareSemverPrereleaseStrings(strings.ToLower(a), strings.ToLower(b))
 }
 
 // compareMaven compares two Maven version strings.
@@ -614,13 +650,15 @@ func getMavenQualifierOrder(q string) (int, bool) {
 }
 
 func parseMavenVersion(s string) []mavenComponent {
-	var result []mavenComponent
-
 	// Maven versions are split by . and - AND on transitions between digits and letters
 	s = strings.ToLower(s)
 
 	// Split on delimiters and digit/letter transitions, tracking separators
 	parts, afterDashFlags := splitMavenVersionWithSeparators(s)
+	var result []mavenComponent
+	if len(parts) > 0 {
+		result = make([]mavenComponent, 0, len(parts))
+	}
 
 	for i, part := range parts {
 		if part == "" {
@@ -683,11 +721,7 @@ func normalizeMavenComponents(components []mavenComponent) []mavenComponent {
 			baseEnd--
 		}
 		if baseEnd < firstSublistIdx {
-			// Rebuild: base without trailing zeros + sublist portion
-			newComponents := make([]mavenComponent, baseEnd)
-			copy(newComponents, components[:baseEnd])
-			newComponents = append(newComponents, components[firstSublistIdx:]...)
-			components = newComponents
+			components = append(components[:baseEnd], components[firstSublistIdx:]...)
 		}
 	} else if firstSublistIdx == -1 {
 		// No sublist - just remove trailing zeros from the end
