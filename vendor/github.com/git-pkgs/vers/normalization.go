@@ -13,6 +13,10 @@ var (
 )
 
 func validVersionForScheme(version, scheme string) bool { //nolint:gocyclo
+	if scheme == schemeBazel {
+		_, ok := parseBazelVersion(version)
+		return ok && version != ""
+	}
 	version = strings.TrimSpace(version)
 	if version == "" {
 		return false
@@ -20,8 +24,11 @@ func validVersionForScheme(version, scheme string) bool { //nolint:gocyclo
 
 	switch scheme {
 	case schemePyPI:
-		_, ok := parsePEP440(version)
-		return ok
+		return pep440Regex.MatchString(version)
+	case schemeComposer:
+		return validComposerVersion(version)
+	case schemePub:
+		return validPubVersion(version)
 	case schemeSemVer, schemeNPM, schemeCargo, schemeGo, schemeGolang, schemeHex, schemeElixir:
 		return validSemverLike(version)
 	case schemeGem, schemeRubyGems:
@@ -37,7 +44,9 @@ func validVersionForScheme(version, scheme string) bool { //nolint:gocyclo
 	case schemeOpenSSL:
 		_, ok := parseOpenSSLVersion(version)
 		return ok
-	case schemeMaven, schemeLexicographic, schemeDatetime, schemeAPK, schemeAlpine, schemeGentoo, schemeALPM, schemeConan:
+	case schemeAPK, schemeAlpine:
+		return validAPKVersion(version)
+	case schemeMaven, schemeLexicographic, schemeDatetime, schemeGentoo, schemeALPM, schemeConan:
 		return !strings.ContainsAny(version, " \t\r\n")
 	default:
 		return Valid(version)
@@ -45,6 +54,13 @@ func validVersionForScheme(version, scheme string) bool { //nolint:gocyclo
 }
 
 func normalizeVersionForScheme(version, scheme string) (string, error) {
+	if scheme == schemeBazel {
+		parsed, ok := parseBazelVersion(version)
+		if !ok || version == "" {
+			return "", fmt.Errorf("invalid %s version: %s", scheme, version)
+		}
+		return parsed.normalized, nil
+	}
 	version = strings.TrimSpace(version)
 	if scheme == "" {
 		return Normalize(version)
@@ -57,6 +73,10 @@ func normalizeVersionForScheme(version, scheme string) (string, error) {
 	case schemePyPI:
 		v, _ := parsePEP440(version)
 		return formatPEP440(v), nil
+	case schemeComposer:
+		return normalizeComposerVersion(version), nil
+	case schemePub:
+		return normalizePubVersion(version), nil
 	case schemeSemVer, schemeNPM, schemeCargo, schemeGo, schemeGolang, schemeHex, schemeElixir:
 		return normalizeSemverLike(version, scheme == schemeGo || scheme == schemeGolang), nil
 	case schemeGem, schemeRubyGems, schemeDeb, schemeDebian, schemeRPM, schemeNuGet, schemeIntDot, schemeOpenSSL,
@@ -68,16 +88,16 @@ func normalizeVersionForScheme(version, scheme string) (string, error) {
 }
 
 func validSemverLike(s string) bool {
-	m := SemanticVersionRegex.FindStringSubmatch(s)
-	if m == nil {
+	parsed, ok := parseSemverValue(s)
+	if !ok {
 		return false
 	}
-	for _, field := range []string{m[4], m[5]} {
+	for _, field := range []string{parsed.pre, semverBuild(s)} {
 		if field == "" {
 			continue
 		}
-		for _, part := range strings.Split(field, ".") {
-			if part == "" || strings.Trim(part, "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-") != "" {
+		for part := range strings.SplitSeq(field, ".") {
+			if part == "" || !validGoIdentifier(part) {
 				return false
 			}
 		}
