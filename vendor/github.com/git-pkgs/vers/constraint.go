@@ -3,14 +3,13 @@ package vers
 import (
 	"fmt"
 	"net/url"
-	"regexp"
 	"strings"
 )
 
 // Valid constraint operators.
 var ValidOperators = []string{"=", "!=", "<", "<=", ">", ">="}
 
-var operatorRegex = regexp.MustCompile(`^(!=|>=|<=|[<>=])`)
+const compoundOperatorLength = 2
 
 // Constraint represents a single version constraint (e.g., ">=1.2.3").
 type Constraint struct {
@@ -30,19 +29,17 @@ func ParseConstraintWithScheme(s, scheme string) (*Constraint, error) {
 }
 
 // parseConstraintWithScheme parses a constraint with scheme-specific handling.
-// For Go/golang schemes, the v prefix is preserved.
+// For Go/golang and Bazel schemes, the v prefix is preserved.
 func parseConstraintWithScheme(s, scheme string) (*Constraint, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return nil, fmt.Errorf("empty constraint")
 	}
 
-	// Go versions preserve the v prefix
-	preserveVPrefix := scheme == schemeGo || scheme == schemeGolang
+	preserveVPrefix := scheme == schemeGo || scheme == schemeGolang || scheme == schemeBazel
 
-	matches := operatorRegex.FindStringSubmatch(s)
-	if matches != nil {
-		operator := matches[1]
+	operator := constraintOperator(s)
+	if operator != "" {
 		version := strings.TrimSpace(s[len(operator):])
 		if version == "" {
 			return nil, fmt.Errorf("invalid constraint format: %s", s)
@@ -65,6 +62,22 @@ func parseConstraintWithScheme(s, scheme string) (*Constraint, error) {
 		version = stripVPrefix(version)
 	}
 	return &Constraint{Operator: "=", Version: version, Scheme: scheme}, nil
+}
+
+func constraintOperator(s string) string {
+	if len(s) >= compoundOperatorLength {
+		switch s[:compoundOperatorLength] {
+		case "!=", ">=", "<=":
+			return s[:compoundOperatorLength]
+		}
+	}
+	if len(s) > 0 {
+		switch s[0] {
+		case '<', '>', '=':
+			return s[:1]
+		}
+	}
+	return ""
 }
 
 // stripVPrefix removes a leading 'v' or 'V' from version strings.
