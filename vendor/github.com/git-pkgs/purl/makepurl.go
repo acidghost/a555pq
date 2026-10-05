@@ -4,49 +4,116 @@ import (
 	"strings"
 
 	"github.com/git-pkgs/vers"
+	packageurl "github.com/package-url/packageurl-go"
 )
 
-// CleanVersion extracts a version from a version constraint string.
-// Uses the vers library to parse the constraint and extract the minimum bound.
-// If parsing fails, returns the original string.
+// CleanVersion returns plain versions unchanged. For version constraints, it
+// uses the vers library to extract the lowest included version. If no included
+// minimum can be identified, it returns the original string.
 func CleanVersion(version, scheme string) string {
 	if version == "" {
 		return ""
 	}
-
-	r, err := vers.ParseNative(version, scheme)
-	if err != nil || len(r.Intervals) == 0 {
+	if !hasConstraintSyntax(version, scheme) && vers.ValidWithScheme(version, scheme) {
 		return version
 	}
 
-	// Return the minimum bound from the first interval
-	if r.Intervals[0].Min != "" {
-		return r.Intervals[0].Min
+	r, err := vers.ParseNative(version, scheme)
+	if err != nil {
+		return version
+	}
+
+	if minimum, ok := r.MinimumVersion(); ok {
+		return minimum
 	}
 
 	return version
 }
 
+func hasConstraintSyntax(version, scheme string) bool {
+	constraint := strings.TrimSpace(version)
+	if constraint == "" {
+		return false
+	}
+
+	switch constraint[0] {
+	case '<', '>', '=', '!', '^', '~':
+		return true
+	}
+
+	switch scheme {
+	case ecosystemMaven:
+		return constraint[0] == '[' || constraint[0] == '('
+	case "conan":
+		return constraint == "*" || constraint == "*-" ||
+			strings.HasSuffix(constraint, "-") || strings.Contains(constraint, "||") ||
+			strings.Contains(constraint, ",")
+	}
+
+	return false
+}
+
 // BuildPURLString builds a PURL string directly from ecosystem-native identifiers
 // without creating intermediate PURL structs. This is the fast path for manifest
-// parsing where we just need the string output.
+// parsing where we just need the string output. It returns an empty string when
+// the package identifier cannot be represented as a PURL.
 func BuildPURLString(ecosystem, name, version, registryURL string) string {
 	purlType := EcosystemToPURLType(ecosystem)
+	namespace, pkgName, ok := splitNamespace(ecosystem, name)
+	if !ok {
+		return ""
+	}
 	cleanVersion := CleanVersion(version, purlType)
-	namespace, pkgName := splitNamespace(ecosystem, name)
 
-	needsQualifier := registryURL != "" && IsNonDefaultRegistry(purlType, registryURL)
+	if suppressRepositoryURL(purlType) {
+		registryURL = ""
+	}
+	if registryURL != "" && !IsNonDefaultRegistry(purlType, registryURL) {
+		registryURL = ""
+	}
 
-	// Estimate capacity
-	n := 4 + len(purlType) + 1 + len(pkgName) // "pkg:" + type + "/" + name
-	if namespace != "" {
-		n += 1 + len(namespace) // "/" + namespace
+	namespace, pkgName, cleanVersion = normalizeComponents(purlType, namespace, pkgName, cleanVersion, registryURL)
+	return buildPURLString(purlType, namespace, pkgName, cleanVersion, registryURL)
+}
+
+// normalizeComponents applies packageurl-go's per-type canonicalization
+// (lowercasing composer/golang names, PyPI underscore-to-dash, etc) so the
+// fast-path string builders agree with Parse. The registryURL is passed as a
+// repository_url qualifier because some types (mlflow) vary name casing by
+// registry. Normalize's error is ignored so the result matches New, which also
+// discards it; whatever fields Normalize wrote before erroring are kept.
+func normalizeComponents(purlType, namespace, name, version, registryURL string) (string, string, string) {
+	var q packageurl.Qualifiers
+	if registryURL != "" {
+		q = packageurl.Qualifiers{{Key: "repository_url", Value: registryURL}}
 	}
-	if cleanVersion != "" {
-		n += 1 + len(cleanVersion) // "@" + version
+	p := packageurl.PackageURL{
+		Type:       purlType,
+		Namespace:  namespace,
+		Name:       name,
+		Version:    version,
+		Qualifiers: q,
 	}
-	if needsQualifier {
-		n += len("?repository_url=") + len(registryURL)
+	_ = p.Normalize()
+	return p.Namespace, p.Name, p.Version
+}
+
+// suppressRepositoryURL reports whether BuildPURLString should drop the
+// caller's registryURL instead of emitting a repository_url qualifier. Helm
+// Chart.yaml repository values include machine-local aliases and relative
+// file paths that do not identify a package outside the author's environment,
+// and the pkg:helm type has no accepted repository_url qualifier definition.
+func suppressRepositoryURL(purlType string) bool {
+	return purlType == "helm"
+}
+
+func buildPURLString(purlType, namespace, name, version, registryURL string) string {
+	n := len("pkg:") + len(purlType) + escapedNamespaceLength(namespace) + 1 + escapedComponentLength(name)
+	if version != "" {
+		n += 1 + escapedComponentLength(version)
+	}
+	if registryURL != "" {
+		n += len("?repository_url=") + escapedQualifierLength(registryURL)
 	}
 
 	var b strings.Builder
@@ -54,27 +121,23 @@ func BuildPURLString(ecosystem, name, version, registryURL string) string {
 
 	b.WriteString("pkg:")
 	b.WriteString(purlType)
-	if namespace != "" {
-		// Write namespace segments, escaping each one
-		for namespace != "" {
-			b.WriteByte('/')
-			seg := namespace
-			if i := strings.IndexByte(namespace, '/'); i >= 0 {
-				seg = namespace[:i]
-				namespace = namespace[i+1:]
-			} else {
-				namespace = ""
+	start := 0
+	for i := 0; i <= len(namespace); i++ {
+		if i == len(namespace) || namespace[i] == '/' {
+			if i > start {
+				b.WriteByte('/')
+				writeComponentEscaped(&b, namespace[start:i])
 			}
-			writeComponentEscaped(&b, seg)
+			start = i + 1
 		}
 	}
 	b.WriteByte('/')
-	writeComponentEscaped(&b, pkgName)
-	if cleanVersion != "" {
+	writeComponentEscaped(&b, name)
+	if version != "" {
 		b.WriteByte('@')
-		writeComponentEscaped(&b, cleanVersion)
+		writeComponentEscaped(&b, version)
 	}
-	if needsQualifier {
+	if registryURL != "" {
 		b.WriteString("?repository_url=")
 		writeQualifierEscaped(&b, registryURL)
 	}
@@ -82,40 +145,76 @@ func BuildPURLString(ecosystem, name, version, registryURL string) string {
 	return b.String()
 }
 
+func escapedNamespaceLength(namespace string) int {
+	n := 0
+	start := 0
+	for i := 0; i <= len(namespace); i++ {
+		if i == len(namespace) || namespace[i] == '/' {
+			if i > start {
+				n += 1 + escapedComponentLength(namespace[start:i])
+			}
+			start = i + 1
+		}
+	}
+	return n
+}
+
+func escapedComponentLength(s string) int {
+	n := len(s)
+	for i := 0; i < len(s); i++ {
+		if !isComponentSafe(s[i]) {
+			n += 2 //nolint:mnd
+		}
+	}
+	return n
+}
+
+func escapedQualifierLength(s string) int {
+	n := len(s)
+	for i := 0; i < len(s); i++ {
+		if !isQualifierValueSafe(s[i]) {
+			n += 2 //nolint:mnd
+		}
+	}
+	return n
+}
+
 // splitNamespace extracts namespace and package name from an ecosystem-native
-// package identifier.
-func splitNamespace(ecosystem, name string) (namespace, pkgName string) {
+// package identifier. It reports false when the identifier cannot be represented
+// by its ecosystem's PURL type.
+func splitNamespace(ecosystem, name string) (namespace, pkgName string, ok bool) {
 	pkgName = name
+	ok = true
 	normalized := NormalizeEcosystem(ecosystem)
 
-	if ns, ok := defaultNamespaces[normalized]; ok {
+	if ns, found := defaultNamespaces[normalized]; found {
 		namespace = ns
 	}
 
 	switch normalized {
-	case "npm":
+	case ecosystemNPM:
 		if strings.HasPrefix(name, "@") {
 			if i := strings.IndexByte(name, '/'); i >= 0 {
 				namespace = name[:i]
 				pkgName = name[i+1:]
 			}
 		}
-	case "golang":
+	case ecosystemGolang:
 		if i := strings.LastIndex(name, "/"); i > 0 {
 			namespace = name[:i]
 			pkgName = name[i+1:]
 		}
-	case "maven":
+	case ecosystemMaven:
 		if i := strings.IndexByte(name, ':'); i >= 0 {
 			namespace = name[:i]
 			pkgName = name[i+1:]
 		}
-	case "packagist", "composer":
+	case ecosystemPackagist, ecosystemComposer:
 		if i := strings.IndexByte(name, '/'); i >= 0 {
 			namespace = name[:i]
 			pkgName = name[i+1:]
 		}
-	case "github-actions":
+	case ecosystemGitHubActions:
 		if i := strings.IndexByte(name, '/'); i >= 0 {
 			namespace = name[:i]
 			rest := name[i+1:]
@@ -125,6 +224,17 @@ func splitNamespace(ecosystem, name string) (namespace, pkgName string) {
 				pkgName = rest
 			}
 		}
+	case ecosystemSwift:
+		i := strings.LastIndexByte(name, '/')
+		if i <= 0 || i == len(name)-1 {
+			return "", "", false
+		}
+		namespace = name[:i]
+		ownerSeparator := strings.IndexByte(namespace, '/')
+		if ownerSeparator <= 0 || ownerSeparator == len(namespace)-1 || strings.Contains(namespace, "//") {
+			return "", "", false
+		}
+		pkgName = name[i+1:]
 	}
 	return
 }
