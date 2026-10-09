@@ -75,7 +75,10 @@ type pubspec struct {
 func (r *Registry) FetchPackage(ctx context.Context, name string) (*core.Package, error) {
 	url := fmt.Sprintf("%s/api/packages/%s", r.baseURL, name)
 
-	var resp packageResponse
+	var resp struct {
+		Name   string      `json:"name"`
+		Latest versionInfo `json:"latest"`
+	}
 	if err := r.client.GetJSON(ctx, url, &resp); err != nil {
 		if httpErr, ok := err.(*core.HTTPError); ok && httpErr.IsNotFound() {
 			return nil, &core.NotFoundError{Ecosystem: ecosystem, Name: name}
@@ -86,7 +89,7 @@ func (r *Registry) FetchPackage(ctx context.Context, name string) (*core.Package
 	latest := resp.Latest.Pubspec
 	repository := urlparser.Parse(latest.Repository)
 	if repository == "" {
-		repository = urlparser.Parse(latest.Homepage)
+		repository = urlparser.CanonicalURL(latest.Homepage)
 	}
 
 	return &core.Package{
