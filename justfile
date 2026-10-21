@@ -47,6 +47,9 @@ lint:
 test *args:
     go test -v {{args}} ./...
 
+pprof *args:
+    go tool pprof {{args}}
+
 install: build
     cp -v './build/{{program}}-{{goos}}-{{goarch}}' "{{install_prefix}}/{{program}}"
 
