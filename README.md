@@ -113,6 +113,28 @@ a555pq pypi show requests -o json
 
 The `show` command supports `--raw` for complete API responses.
 
+### CPU Profiling
+
+All commands inherit the root `--pprof <file>` flag, which records a Go CPU
+profile without changing normal table/JSON output or printing timing summaries:
+
+```bash
+a555pq --pprof cpu.pprof container latest nginx
+# The flag can also follow the subcommand:
+a555pq npm latest chalk --pprof npm-cpu.pprof
+
+# Inspect the profile with Go's standard tools:
+go tool pprof -top cpu.pprof
+# Or, from this repository:
+just pprof -top cpu.pprof
+```
+
+The output file must not already exist; profiles are created with mode `0600`.
+Profiling starts before command hooks and is stopped and flushed even when the
+command returns an error. Help and argument-validation errors do not create a
+profile. CPU profiles show CPU consumption, not time spent waiting on network
+I/O.
+
 ## Development
 
 ### Building
