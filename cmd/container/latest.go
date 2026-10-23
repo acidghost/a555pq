@@ -1,11 +1,15 @@
 package container
 
 import (
+	"time"
+
 	"github.com/acidghost/a555pq/cmd/shared"
 	"github.com/acidghost/a555pq/internal/container"
 	"github.com/acidghost/a555pq/internal/formatter"
 	"github.com/spf13/cobra"
 )
+
+var latestMinReleaseAge time.Duration
 
 var latestCmd = &cobra.Command{
 	Use:   "latest <image>",
@@ -15,14 +19,16 @@ var latestCmd = &cobra.Command{
 		imageName := args[0]
 
 		client := container.NewClient()
-		tag, err := client.GetLatestTag(imageName)
+		options := container.Options{MinReleaseAge: latestMinReleaseAge}
+		tag, err := client.GetLatestTag(imageName, options)
 		if err != nil {
 			return err
 		}
 
 		output := &formatter.ContainerLatestOutput{
 			Image:   imageName,
-			Version: tag,
+			Version: tag.Name,
+			Digest:  tag.Digest,
 		}
 
 		var f formatter.OutputFormatter
@@ -37,5 +43,10 @@ var latestCmd = &cobra.Command{
 }
 
 func init() {
+	latestCmd.Flags().VarP(
+		shared.NewTimespanValue(&latestMinReleaseAge),
+		"min-release-age", "",
+		"require Docker Hub tags last pushed at least this long ago (e.g. 7d, 6mo, 1y); unknown push times are excluded",
+	)
 	Cmd.AddCommand(latestCmd)
 }

@@ -23,8 +23,9 @@ type ShowOutput struct {
 }
 
 type VersionsOutput struct {
-	Package  string
-	Versions []VersionItem
+	Package   string
+	Versions  []VersionItem
+	Truncated bool `json:",omitempty"`
 }
 
 type LatestOutput struct {
@@ -52,4 +53,5 @@ type ContainerShowOutput struct {
 type ContainerLatestOutput struct {
 	Image   string
 	Version string
+	Digest  string `json:",omitempty"`
 }

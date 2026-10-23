@@ -1,6 +1,8 @@
 package container
 
 import (
+	"time"
+
 	"github.com/acidghost/a555pq/cmd/shared"
 	"github.com/acidghost/a555pq/internal/container"
 	"github.com/acidghost/a555pq/internal/formatter"
@@ -8,6 +10,8 @@ import (
 )
 
 var rawOutput bool
+
+var showMinReleaseAge time.Duration
 
 var showCmd = &cobra.Command{
 	Use:   "show <image>",
@@ -18,7 +22,8 @@ var showCmd = &cobra.Command{
 		imageName := args[0]
 
 		client := container.NewClient()
-		info, err := client.GetImageInfo(imageName)
+		options := container.Options{MinReleaseAge: showMinReleaseAge}
+		info, err := client.GetImageInfo(imageName, options)
 		if err != nil {
 			return err
 		}
@@ -56,6 +61,11 @@ var showCmd = &cobra.Command{
 }
 
 func init() {
+	showCmd.Flags().VarP(
+		shared.NewTimespanValue(&showMinReleaseAge),
+		"min-release-age", "",
+		"require Docker Hub tags last pushed at least this long ago (e.g. 7d, 6mo, 1y); unknown push times are excluded",
+	)
 	showCmd.Flags().BoolVar(&rawOutput, "raw", false, "Output raw JSON from registry")
 	Cmd.AddCommand(showCmd)
 }
