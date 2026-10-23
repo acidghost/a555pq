@@ -115,6 +115,9 @@ func (f *TableFormatter) formatContainerShow(data *ContainerShowOutput) error {
 
 func (f *TableFormatter) formatContainerLatest(data *ContainerLatestOutput) error {
 	fmt.Fprintf(f.writer, "Latest Tag:\t%s\n", data.Version)
+	if data.Digest != "" {
+		fmt.Fprintf(f.writer, "Digest:\t%s\n", data.Digest)
+	}
 	return f.writer.Flush()
 }
 

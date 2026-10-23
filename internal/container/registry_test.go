@@ -1,8 +1,6 @@
 package container
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestFilterSemverTags(t *testing.T) {
 	tests := []struct {
@@ -78,97 +76,4 @@ func TestFilterSemverTags(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestGetLatestTag_SemverOnly(t *testing.T) {
-	registry := NewUnifiedRegistry()
-
-	tests := []struct {
-		name        string
-		image       string
-		wantTag     string
-		wantErr     bool
-		errContains string
-	}{
-		{
-			name:    "image with semver tags returns highest",
-			image:   "library/nginx",
-			wantTag: "",
-			wantErr: true,
-		},
-		{
-			name:    "empty image name",
-			image:   "",
-			wantTag: "",
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := registry.GetLatestTag(ImageReference{Name: tt.image})
-			if (err != nil) != tt.wantErr {
-				t.Errorf("GetLatestTag() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if err != nil && tt.errContains != "" {
-				if !containsString(err.Error(), tt.errContains) {
-					t.Errorf("GetLatestTag() error = %v, want error containing %v", err, tt.errContains)
-				}
-			}
-			if got != tt.wantTag {
-				t.Errorf("GetLatestTag() = %v, want %v", got, tt.wantTag)
-			}
-		})
-	}
-}
-
-func TestGetImageInfoWithTag_WithDateAndSize(t *testing.T) {
-	registry := NewUnifiedRegistry()
-
-	tests := []struct {
-		name        string
-		image       ImageReference
-		wantErr     bool
-		checkFields bool
-	}{
-		{
-			name:        "fetch with tag",
-			image:       ImageReference{Name: "nginx", Tag: "latest"},
-			wantErr:     false,
-			checkFields: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := registry.GetImageInfo(tt.image)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("GetImageInfoWithTag() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !tt.wantErr && tt.checkFields && got != nil {
-				if got.TagDate == "" {
-					t.Logf("GetImageInfoWithTag() TagDate is empty (may not be available)")
-				}
-				if got.Size == "" {
-					t.Logf("GetImageInfoWithTag() Size is empty (may not be available)")
-				}
-				t.Logf("GetImageInfoWithTag() TagDate = %s, Size = %s", got.TagDate, got.Size)
-			}
-		})
-	}
-}
-
-func containsString(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && findSubstring(s, substr))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

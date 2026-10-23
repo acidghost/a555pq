@@ -32,7 +32,10 @@ func NewUnifiedRegistry() *UnifiedRegistry {
 	}
 }
 
-func (r *UnifiedRegistry) GetImageInfo(ref ImageReference) (*ImageInfo, error) {
+func (r *UnifiedRegistry) GetImageInfo(ref ImageReference, opts Options) (*ImageInfo, error) {
+	if opts.MinReleaseAge > 0 {
+		return r.getCooledImageInfo(ref, opts)
+	}
 	repoRef, err := r.parseRef(ref)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse reference: %w", err)
@@ -81,12 +84,30 @@ func (r *UnifiedRegistry) GetImageInfo(ref ImageReference) (*ImageInfo, error) {
 	}, nil
 }
 
-func (r *UnifiedRegistry) GetTags(ref ImageReference) ([]TagInfo, error) {
+func (r *UnifiedRegistry) GetTags(ref ImageReference, opts Options) (*TagList, error) {
+	if opts.MaxPages < 0 {
+		return nil, fmt.Errorf("--max-pages must be non-negative")
+	}
+	if opts.MinReleaseAge > 0 || opts.MaxPages > 0 {
+		repo, err := r.dockerHubRepository(ref)
+		if err != nil {
+			return nil, err
+		}
+		result, err := r.fetchDockerHubTags(repo, opts.MaxPages)
+		if err != nil {
+			return nil, err
+		}
+		if opts.MinReleaseAge > 0 {
+			result.Tags = filterTagsByMinReleaseAge(result.Tags, opts.MinReleaseAge, time.Now())
+		}
+		result.Tags = sortTagsBySemver(result.Tags)
+		return result, nil
+	}
+
 	repoRef, err := r.parseRef(ref)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse reference: %w", err)
 	}
-
 	tags, err := remote.List(repoRef, r.options...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list tags: %w", err)
@@ -99,30 +120,34 @@ func (r *UnifiedRegistry) GetTags(ref ImageReference) ([]TagInfo, error) {
 		})
 	}
 
-	return sortTagsBySemver(result), nil
+	return &TagList{Tags: sortTagsBySemver(result)}, nil
 }
 
-func (r *UnifiedRegistry) GetLatestTag(ref ImageReference) (string, error) {
-	tags, err := r.GetTags(ref)
+func (r *UnifiedRegistry) GetLatestTag(ref ImageReference, opts Options) (TagInfo, error) {
+	if opts.MinReleaseAge > 0 {
+		return r.getLatestCooledTag(ref, opts)
+	}
+	tags, err := r.GetTags(ref, opts)
 	if err != nil {
-		return "", err
+		return TagInfo{}, err
 	}
+	return latestSemverTag(tags.Tags, ref.Name)
+}
 
+func latestSemverTag(tags []TagInfo, image string) (TagInfo, error) {
 	if len(tags) == 0 {
-		return "", fmt.Errorf("no tags found for image '%s'", ref.Name)
+		return TagInfo{}, fmt.Errorf("no eligible tags found for image '%s'", image)
 	}
-
 	semverTags := filterSemverTags(tags)
 	if len(semverTags) == 0 {
-		return "", fmt.Errorf("no semantic version tags found for image '%s'", ref.Name)
+		return TagInfo{}, fmt.Errorf("no semantic version tags found for image '%s'", image)
 	}
-
-	return semverTags[0].Name, nil
+	return semverTags[0], nil
 }
 
 func (r *UnifiedRegistry) GetBrowseURL(ref ImageReference) string {
 	registry := ref.Registry
-	if registry == "" || registry == RegistryDocker || registry == RegistryDockerV2 {
+	if registry == "" || registry == RegistryDocker || registry == RegistryDockerV2 || registry == name.DefaultRegistry {
 		org := ref.Organization
 		if org == "" {
 			org = "library"
@@ -192,7 +217,7 @@ func (r *UnifiedRegistry) fetchTagMetadata(repo name.Repository, tag string) (Ta
 
 func (r *UnifiedRegistry) isDockerHub(repo name.Repository) bool {
 	registryStr := repo.Registry.Name()
-	return registryStr == "" || registryStr == RegistryDocker || registryStr == RegistryDockerV2 || strings.Contains(registryStr, "docker.io")
+	return registryStr == "" || registryStr == RegistryDocker || registryStr == RegistryDockerV2 || registryStr == name.DefaultRegistry
 }
 
 func (r *UnifiedRegistry) extractMetadataFromDesc(desc *remote.Descriptor, repo name.Repository, tag string) (string, string) {
@@ -300,7 +325,7 @@ func (r *UnifiedRegistry) calculateMultiArchSize(desc *remote.Descriptor, repo n
 }
 
 func (r *UnifiedRegistry) fetchDescription(ref ImageReference, imageName, targetTag string) string {
-	if ref.Registry == "" || ref.Registry == RegistryDocker || ref.Registry == RegistryDockerV2 {
+	if ref.Registry == "" || ref.Registry == RegistryDocker || ref.Registry == RegistryDockerV2 || ref.Registry == name.DefaultRegistry {
 		if desc := r.fetchDockerHubDescription(ref); desc != "" {
 			return desc
 		}
@@ -485,7 +510,7 @@ func (r *UnifiedRegistry) buildFullImageRef(ref ImageReference) string {
 }
 
 func (r *UnifiedRegistry) getRegistryName(registry string) string {
-	if registry == "" || registry == RegistryDocker || registry == RegistryDockerV2 {
+	if registry == "" || registry == RegistryDocker || registry == RegistryDockerV2 || registry == name.DefaultRegistry {
 		return "Docker Hub"
 	}
 

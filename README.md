@@ -65,6 +65,65 @@ Some ecosystems do not publish release timestamps (e.g. deno, terraform,
 haxelib, julia, luarocks, nimble). For those the flag has no effect and all
 versions are returned.
 
+### Container Cooldown (Docker Hub)
+
+Docker Hub images support `--min-release-age` on `latest`, `versions`, and
+`show`, using the same timespan syntax:
+
+```bash
+a555pq container latest nginx --min-release-age 7d
+a555pq container versions nginx --min-release-age 1w2d
+a555pq container show nginx:1.28.0 --min-release-age 7d
+```
+
+Like Renovate, this uses Docker Hub's `tag_last_pushed` timestamp—not
+`last_updated` or publisher-controlled image creation dates. Tags with missing
+or invalid push times are excluded. Other container registries and failed Hub
+API requests produce errors rather than bypassing the cooldown.
+
+`latest` lists all tag names through the OCI registry API, then prefetches up to
+three pages of recent Docker Hub metadata (100 tags per page). It checks tags in
+descending semantic-version order, using that query-local cache and fetching
+individual tags only when they are missing. It never chooses a lower version
+just because it appears in the recent metadata. Prefetch failures fall back to
+individual checks, without bypassing the cooldown or scanning all Hub pages.
+
+With a cooldown, `show` without a tag uses that same selection; an explicit tag
+is looked up directly, checked, and never silently replaced. Without the flag,
+existing behavior is unchanged (including `show` defaulting to the literal
+`latest` tag).
+
+The metadata cache lasts only for that query, so future calls recheck mutable
+tags.
+
+`versions` retrieves all tag metadata by default. Docker Hub limits deep
+pagination for anonymous requests, so unbounded cooldown queries may fail on
+large repositories. Use `--max-pages` to bound retrieval before age filtering:
+
+```bash
+a555pq container versions docker.io/library/nginx --min-release-age 3d --max-pages 10
+```
+
+Each page contains up to 100 tags. `--max-pages 0` (the default) means no explicit
+limit; negative values are rejected. The option is Docker Hub-only and also
+works without `--min-release-age`.
+
+When more pages remain at the budget, table output warns on stderr and JSON
+includes `"Truncated": true` (omitted for complete results). The bound counts
+retrieved pages, not eligible versions: the result can be empty if all inspected
+tags are too recent. Pages are fetched in Hub's `last_updated` order, so this is
+a bounded metadata snapshot, not necessarily the highest N semantic versions.
+
+HTTP and pagination errors within the budget remain fatal; no partial results
+are returned on errors. Hub authentication is not yet supported.
+
+Tags can move after a check. Cooldown-enabled `latest` includes the Hub digest,
+and `show` returns a digest-pinned image reference. Use the digest when pulling.
+The timestamp describes the tag's last push, not the digest's first publication;
+repushing an older image can therefore restart its cooldown. Hub API access is
+currently unauthenticated, so private repositories are not supported by this
+feature.
+
 ### GitHub Authentication
 
 The GitHub commands support two authentication methods:

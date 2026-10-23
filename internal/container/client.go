@@ -92,19 +92,19 @@ func (c *Client) parseRestParts(rest string, ref *ImageReference) {
 	}
 }
 
-func (c *Client) GetImageInfo(image string) (*ImageInfo, error) {
+func (c *Client) GetImageInfo(image string, opts Options) (*ImageInfo, error) {
 	ref := c.detectRegistry(image)
-	return c.registry.GetImageInfo(ref)
+	return c.registry.GetImageInfo(ref, opts)
 }
 
-func (c *Client) GetTags(image string) ([]TagInfo, error) {
+func (c *Client) GetTags(image string, opts Options) (*TagList, error) {
 	ref := c.detectRegistry(image)
-	return c.registry.GetTags(ref)
+	return c.registry.GetTags(ref, opts)
 }
 
-func (c *Client) GetLatestTag(image string) (string, error) {
+func (c *Client) GetLatestTag(image string, opts Options) (TagInfo, error) {
 	ref := c.detectRegistry(image)
-	return c.registry.GetLatestTag(ref)
+	return c.registry.GetLatestTag(ref, opts)
 }
 
 func (c *Client) GetBrowseURL(image string) (string, error) {
