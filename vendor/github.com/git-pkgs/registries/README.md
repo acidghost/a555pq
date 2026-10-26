@@ -208,10 +208,14 @@ type Package struct {
     Namespace     string         // @scope for npm, groupId for maven
     LatestVersion string         // latest version (populated by some registries)
     Metadata      map[string]any // registry-specific data
+    Maintainers   []Maintainer   // populated when the package endpoint includes them
+    FundingLinks  []string       // funding or sponsorship URLs
 }
 ```
 
 Some registries (npm, pub, deno, conda) populate `LatestVersion` directly. For others, use `FetchLatestVersionFromPURL`.
+
+`Maintainers` is filled in by npm and hex, whose package endpoints already return maintainer data. Other registries leave it nil; use `FetchMaintainers` for those. `FundingLinks` is filled in from npm `funding`, RubyGems `funding_uri`, Hex links and PyPI `project_urls` whose labels mention funding, sponsoring or donating.
 
 ### Version
 
@@ -478,12 +482,29 @@ info, err := resolver.Resolve(ctx, "cargo", "serde", "1.0.0")
 // info.Integrity may be populated for metadata-resolved URLs
 ```
 
+When a version has several files, `ResolveWithOptions` picks one by PURL qualifiers. `arch`, `distro`, `subdir` and `build` are matched against artifact metadata, and an artifact that doesn't record a qualifier isn't ruled out by it. `repository_url` and `channel` are ignored: register a registry for that URL instead.
+
+```go
+info, err := resolver.ResolveWithOptions(ctx, "conda", "zlib", "1.3.1", fetch.ResolveOptions{
+	Qualifiers: map[string]string{"subdir": "osx-arm64"},
+})
+```
+
 The resolver also works without a registered registry for ecosystems with predictable URL patterns:
 
 ```go
 resolver := fetch.NewResolver()
 info, _ := resolver.Resolve(ctx, "npm", "lodash", "4.17.21")
 // info.URL = "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz"
+```
+
+`WithBaseURLs` points those patterns at a mirror instead of the public host. Ecosystems left out of the map keep their defaults:
+
+```go
+resolver := fetch.NewResolver(fetch.WithBaseURLs(map[string]string{
+	"npm":   "https://npm.mycompany.com",
+	"cargo": "https://crates.mycompany.com/crates",
+}))
 ```
 
 ## Private Registries
