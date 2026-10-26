@@ -18,7 +18,7 @@ github.com/git-pkgs/pom
 # github.com/git-pkgs/purl v0.1.21
 ## explicit; go 1.26.0
 github.com/git-pkgs/purl
-# github.com/git-pkgs/registries v0.10.0
+# github.com/git-pkgs/registries v0.11.0
 ## explicit; go 1.26.0
 github.com/git-pkgs/registries
 github.com/git-pkgs/registries/all
