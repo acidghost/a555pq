@@ -1,6 +1,6 @@
 # registries
 
-Go library for fetching package metadata from registry APIs. Supports 26 ecosystems with a unified interface. Also provides sub-packages for HTTP client usage (`client/`) and streaming artifact downloads (`fetch/`).
+Go library for fetching package metadata from registry APIs. Supports 27 ecosystems with a unified interface. Also provides sub-packages for HTTP client usage (`client/`) and streaming artifact downloads (`fetch/`).
 
 ## Installation
 
@@ -192,6 +192,45 @@ import _ "github.com/git-pkgs/registries/all"
 | Homebrew | `brew` | https://formulae.brew.sh |
 | Deno | `deno` | https://apiland.deno.dev |
 | Terraform | `terraform` | https://registry.terraform.io |
+| Swift | `swift` | URL required |
+
+### Swift registries
+
+Swift lookups require an explicit registry URL and a registry identity:
+
+```go
+reg, err := registries.New("swift", "https://registry.example.com", nil)
+// Handle err before using reg.
+pkg, err := reg.FetchPackage(ctx, "scope.package-name")
+versions, err := reg.FetchVersions(ctx, "scope.package-name")
+```
+
+Import `registries/all` to register the adapter. Identities are case-insensitive.
+Source coordinates such as `github.com/owner/repo` are rejected; the adapter does
+not infer registry identities from repository names. Swift source-based PURLs
+cannot drive these lookups, and `URLs().PURL` returns an empty string.
+
+`FetchPackage` reads metadata from the release named by the registry's
+`latest-version` link, falling back to the highest available stable release and
+then the highest prerelease. Pagination and release metadata URLs must stay on
+the registry's origin.
+`FetchVersions` follows pagination and fetches each available release
+for its publication time, source archive URL and SHA256 checksum. A release
+reported with a protocol `problem` is returned as `retracted`, with the problem
+retained in its metadata. Other fetch or decoding failures return an error rather
+than a partial version list.
+
+Release metadata retains fields such as `licenseURL`, `author` and
+`repositoryURLs`. A license URL is not converted into an SPDX expression, and an
+author is not treated as a maintainer. Original publication time takes precedence
+over registry publication time. Archive signatures are retained in artifact
+metadata but are not verified.
+
+`FetchDependencies` and `FetchMaintainers` return errors wrapping
+`errors.ErrUnsupported`. The registry protocol supplies executable Swift
+manifests rather than structured dependency data, and has no maintainer endpoint.
+The adapter does not execute Swift or download archives. Authentication can be
+provided through the shared client's HTTP transport.
 
 ## Types
 
@@ -301,6 +340,7 @@ The default client includes:
 - 30 second timeout
 - 5 retries with exponential backoff (50ms base, 10% jitter)
 - Automatic retry on 429 without a usable Retry-After and on 5xx responses
+- Buffered response bodies limited to 10 MiB and streamed bodies to 512 MiB; a larger body fails with `ErrResponseTooLarge` (change with `WithMaxResponseSize` and `WithMaxStreamSize`)
 
 Custom client via the top-level package:
 
@@ -328,6 +368,11 @@ err := c.GetJSON(ctx, "https://registry.npmjs.org/lodash", &data)
 
 // Raw body
 body, err := c.GetBody(ctx, "https://crates.io/api/v1/crates/serde")
+
+// Streamed JSON, for documents too large to buffer
+err = c.StreamJSON(ctx, "https://registry.npmjs.org/renovate", func(dec *json.Decoder) error {
+    return dec.Decode(&data)
+})
 
 // HEAD request
 statusCode, err := c.Head(ctx, "https://registry.npmjs.org/lodash")
@@ -505,6 +550,14 @@ resolver := fetch.NewResolver(fetch.WithBaseURLs(map[string]string{
 	"npm":   "https://npm.mycompany.com",
 	"cargo": "https://crates.mycompany.com/crates",
 }))
+```
+
+Download URLs taken from registry metadata must use https, and their host must not resolve to a loopback, private, link-local or other internal address. `WithAddressPolicy` relaxes that with the same `safehttp.Options` as the client that downloads them, for example when a private Composer repository points at an internal GitLab:
+
+```go
+opts := safehttp.Options{AllowPrivateHosts: []string{"gitlab.internal"}}
+resolver := fetch.NewResolver(fetch.WithAddressPolicy(opts))
+client := safehttp.New(nil, opts)
 ```
 
 ## Private Registries
