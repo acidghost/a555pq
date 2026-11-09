@@ -1,11 +1,14 @@
 package purl
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/git-pkgs/vers"
 	packageurl "github.com/package-url/packageurl-go"
 )
+
+var swiftRegistryIdentity = regexp.MustCompile(`^[A-Za-z0-9]+(-[A-Za-z0-9]+)*\.[A-Za-z0-9]+([-_][A-Za-z0-9]+)*$`)
 
 // CleanVersion returns plain versions unchanged. For version constraints, it
 // uses the vers library to extract the lowest included version. If no included
@@ -53,10 +56,8 @@ func hasConstraintSyntax(version, scheme string) bool {
 	return false
 }
 
-// BuildPURLString builds a PURL string directly from ecosystem-native identifiers
-// without creating intermediate PURL structs. This is the fast path for manifest
-// parsing where we just need the string output. It returns an empty string when
-// the package identifier cannot be represented as a PURL.
+// BuildPURLString builds a PURL string from ecosystem-native identifiers. It
+// returns an empty string when the identifier cannot be represented as a PURL.
 func BuildPURLString(ecosystem, name, version, registryURL string) string {
 	purlType := EcosystemToPURLType(ecosystem)
 	namespace, pkgName, ok := splitNamespace(ecosystem, name)
@@ -77,8 +78,8 @@ func BuildPURLString(ecosystem, name, version, registryURL string) string {
 }
 
 // normalizeComponents applies packageurl-go's per-type canonicalization
-// (lowercasing composer/golang names, PyPI underscore-to-dash, etc) so the
-// fast-path string builders agree with Parse. The registryURL is passed as a
+// (lowercasing composer names, PyPI underscore-to-dash, etc) so the fast-path
+// string builders agree with Parse. The registryURL is passed as a
 // repository_url qualifier because some types (mlflow) vary name casing by
 // registry. Normalize's error is ignored so the result matches New, which also
 // discards it; whatever fields Normalize wrote before erroring are kept.
@@ -95,6 +96,8 @@ func normalizeComponents(purlType, namespace, name, version, registryURL string)
 		Qualifiers: q,
 	}
 	_ = p.Normalize()
+	preserveGolangCase(&p, namespace, name)
+	lowercaseCaseInsensitive(&p)
 	return p.Namespace, p.Name, p.Version
 }
 
@@ -108,6 +111,13 @@ func suppressRepositoryURL(purlType string) bool {
 }
 
 func buildPURLString(purlType, namespace, name, version, registryURL string) string {
+	if purlType == ecosystemGit {
+		p := PURL{packageurl.PackageURL{Type: purlType, Namespace: namespace, Name: name, Version: version}}
+		if registryURL != "" {
+			p.Qualifiers = packageurl.Qualifiers{{Key: "repository_url", Value: registryURL}}
+		}
+		return p.String()
+	}
 	n := len("pkg:") + len(purlType) + escapedNamespaceLength(namespace) + 1 + escapedComponentLength(name)
 	if version != "" {
 		n += 1 + escapedComponentLength(version)
@@ -192,6 +202,11 @@ func splitNamespace(ecosystem, name string) (namespace, pkgName string, ok bool)
 	}
 
 	switch normalized {
+	case ecosystemGit:
+		namespace, pkgName, ok = strings.Cut(name, "/")
+		if !ok || namespace == "" || pkgName == "" || strings.HasSuffix(pkgName, "/") || strings.Contains(name, "//") {
+			return "", "", false
+		}
 	case ecosystemNPM:
 		if strings.HasPrefix(name, "@") {
 			if i := strings.IndexByte(name, '/'); i >= 0 {
@@ -199,7 +214,7 @@ func splitNamespace(ecosystem, name string) (namespace, pkgName string, ok bool)
 				pkgName = name[i+1:]
 			}
 		}
-	case ecosystemGolang:
+	case ecosystemGolang, "docker":
 		if i := strings.LastIndex(name, "/"); i > 0 {
 			namespace = name[:i]
 			pkgName = name[i+1:]
@@ -224,19 +239,42 @@ func splitNamespace(ecosystem, name string) (namespace, pkgName string, ok bool)
 				pkgName = rest
 			}
 		}
+	case purlTypeVSCodeExtension:
+		return splitVSCodeExtension(name)
 	case ecosystemSwift:
-		i := strings.LastIndexByte(name, '/')
-		if i <= 0 || i == len(name)-1 {
-			return "", "", false
-		}
-		namespace = name[:i]
-		ownerSeparator := strings.IndexByte(namespace, '/')
-		if ownerSeparator <= 0 || ownerSeparator == len(namespace)-1 || strings.Contains(namespace, "//") {
-			return "", "", false
-		}
-		pkgName = name[i+1:]
+		return splitSwift(name)
 	}
 	return
+}
+
+func splitSwift(name string) (namespace, pkgName string, ok bool) {
+	const maxScopeLength, maxNameLength = 39, 100
+	i := strings.LastIndexByte(name, '/')
+	if i < 0 {
+		namespace, pkgName, ok = strings.Cut(name, ".")
+		if !ok || len(namespace) > maxScopeLength || len(pkgName) > maxNameLength || !swiftRegistryIdentity.MatchString(name) {
+			return "", "", false
+		}
+		return namespace, pkgName, true
+	}
+	if i == 0 || i == len(name)-1 {
+		return "", "", false
+	}
+	namespace = name[:i]
+	ownerSeparator := strings.IndexByte(namespace, '/')
+	if ownerSeparator <= 0 || ownerSeparator == len(namespace)-1 || strings.Contains(namespace, "//") {
+		return "", "", false
+	}
+	return namespace, name[i+1:], true
+}
+
+// splitVSCodeExtension splits VS Code's publisher.name extension identifier.
+func splitVSCodeExtension(name string) (publisher, extension string, ok bool) {
+	publisher, extension, ok = strings.Cut(name, ".")
+	if !ok || publisher == "" || extension == "" {
+		return "", "", false
+	}
+	return publisher, extension, true
 }
 
 // writeComponentEscaped writes s to b, percent-encoding characters that are not safe

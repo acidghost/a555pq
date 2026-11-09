@@ -15,14 +15,15 @@ github.com/docker/docker-credential-helpers/credentials
 # github.com/git-pkgs/pom v0.1.8
 ## explicit; go 1.26
 github.com/git-pkgs/pom
-# github.com/git-pkgs/purl v0.1.21
+# github.com/git-pkgs/purl v0.2.1
 ## explicit; go 1.26.0
 github.com/git-pkgs/purl
-# github.com/git-pkgs/registries v0.11.1
+# github.com/git-pkgs/registries v0.13.0
 ## explicit; go 1.26.0
 github.com/git-pkgs/registries
 github.com/git-pkgs/registries/all
 github.com/git-pkgs/registries/client
+github.com/git-pkgs/registries/internal/apk
 github.com/git-pkgs/registries/internal/cargo
 github.com/git-pkgs/registries/internal/clojars
 github.com/git-pkgs/registries/internal/cocoapods
@@ -33,6 +34,7 @@ github.com/git-pkgs/registries/internal/cran
 github.com/git-pkgs/registries/internal/deno
 github.com/git-pkgs/registries/internal/dub
 github.com/git-pkgs/registries/internal/elm
+github.com/git-pkgs/registries/internal/githubactions
 github.com/git-pkgs/registries/internal/golang
 github.com/git-pkgs/registries/internal/hackage
 github.com/git-pkgs/registries/internal/haxelib

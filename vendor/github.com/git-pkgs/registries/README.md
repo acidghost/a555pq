@@ -1,6 +1,6 @@
 # registries
 
-Go library for fetching package metadata from registry APIs. Supports 27 ecosystems with a unified interface. Also provides sub-packages for HTTP client usage (`client/`) and streaming artifact downloads (`fetch/`).
+Go library for fetching package metadata from registry APIs. Supports 29 ecosystems with a unified interface. Also provides sub-packages for HTTP client usage (`client/`), streaming artifact downloads (`fetch/`) and registry change feeds (`changes/`).
 
 ## Installation
 
@@ -134,6 +134,8 @@ packages = registries.BulkFetchPackagesWithConcurrency(ctx, purls, nil, 5)
 | Maven | `pkg:maven/org.apache.commons/commons-lang3@3.12.0` |
 | RubyGems | `pkg:gem/rails@7.1.0` |
 | Terraform | `pkg:terraform/hashicorp/consul/aws@0.11.0` |
+| GitHub Actions | `pkg:githubactions/actions/checkout@v4` |
+| Alpine | `pkg:apk/alpine/curl@8.22.0-r0?arch=x86_64&repository_url=https://dl-cdn.alpinelinux.org/alpine/v3.23/main/x86_64` |
 
 ## Direct Registry Usage
 
@@ -193,6 +195,12 @@ import _ "github.com/git-pkgs/registries/all"
 | Deno | `deno` | https://apiland.deno.dev |
 | Terraform | `terraform` | https://registry.terraform.io |
 | Swift | `swift` | URL required |
+| Alpine | `apk` | URL required |
+| GitHub Actions | `githubactions` | https://api.github.com |
+
+The Alpine URL is one repository architecture directory, such as `https://dl-cdn.alpinelinux.org/alpine/v3.23/main/x86_64`, or the `APKINDEX.tar.gz` inside it. The client doesn't pick a release, component or architecture from a mirror root. It reads v2 `APKINDEX.tar.gz` indexes. When a directory serves a v3 `Packages.adb`, the client returns an error rather than reading the v2 index.
+
+GitHub Actions are git repositories, so `FetchPackage` reads `/repos/{owner}/{repo}` and `FetchVersions` lists tags from the GitHub REST API. Unauthenticated requests are limited to 60 per hour. A subdirectory action such as `pkg:githubactions/github/codeql-action/init@v3` resolves to the `github/codeql-action` repository. `URLs().Download` returns the `/archive/{ref}.tar.gz` source tarball for any tag, branch or commit SHA. GitHub doesn't guarantee these tarballs are byte-stable, so versions carry no `Integrity`. Dependencies and maintainers return an error wrapping `errors.ErrUnsupported`. For GitHub Enterprise Server, pass the `/api/v3` API root as the base URL.
 
 ### Swift registries
 
@@ -207,8 +215,10 @@ versions, err := reg.FetchVersions(ctx, "scope.package-name")
 
 Import `registries/all` to register the adapter. Identities are case-insensitive.
 Source coordinates such as `github.com/owner/repo` are rejected; the adapter does
-not infer registry identities from repository names. Swift source-based PURLs
-cannot drive these lookups, and `URLs().PURL` returns an empty string.
+not infer registry identities from repository names. `URLs().PURL` returns
+registry PURLs such as `pkg:swift/scope/package-name@1.0.0`. PURL-based lookups
+require a `repository_url` qualifier with the registry URL. Swift source-based
+PURLs cannot drive these lookups.
 
 `FetchPackage` reads metadata from the release named by the registry's
 `latest-version` link, falling back to the highest available stable release and
@@ -559,6 +569,30 @@ opts := safehttp.Options{AllowPrivateHosts: []string{"gitlab.internal"}}
 resolver := fetch.NewResolver(fetch.WithAddressPolicy(opts))
 client := safehttp.New(nil, opts)
 ```
+
+## Change Feeds (`changes/`)
+
+Some registries publish a feed of the packages that changed since a given point. `changes` reads them for npm (`replicate.npmjs.com`) and Packagist (`metadata/changes.json`), so a cache or mirror can refresh just those packages.
+
+Feeds are stateless: the caller keeps the cursor, and moves on to the one `Changes` returns only after acting on the changes, so a failure leaves them to be read again. A `Cursor` is a string and can be stored across restarts.
+
+```go
+feed := changes.NewNPM() // or changes.NewPackagist(changes.WithURL(...))
+
+cursor, err := feed.Start(ctx)
+// later, repeatedly:
+c, next, err := feed.Changes(ctx, cursor)
+if err != nil {
+    return err // cursor stays where it was
+}
+if c.All {
+    // the feed lost track; treat every package as changed
+}
+refresh(c.Names)
+cursor = next
+```
+
+Both take `changes.WithClient` for a configured `*client.Client` and `changes.WithURL` for a registry other than the public one. Packagist names the metadata files that changed (`vendor/pkg`, `vendor/pkg~dev`); a deleted package is reported as both.
 
 ## Private Registries
 
