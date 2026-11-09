@@ -1,12 +1,13 @@
 {
   "version": "1.2.0",
-  "description": "Official PURL types with registry configurations",
+  "description": "PURL type metadata with local registry configurations",
   "source": "https://github.com/package-url/purl-spec",
-  "last_updated": "2025-07-27",
+  "last_updated": "2026-10-18",
   "types": {
     "alpm": {
       "description": "Arch Linux packages and other users of the libalpm/pacman package manager.",
       "default_registry": null,
+      "namespace_requirement": "required",
       "examples": [
         "pkg:alpm/arch/pacman@6.0.1-1?arch=x86_64",
         "pkg:alpm/arch/python-pip@21.0-1?arch=any",
@@ -16,14 +17,25 @@
     "apk": {
       "description": "Alpine Linux APK-based packages",
       "default_registry": null,
+      "namespace_requirement": "required",
       "examples": [
         "pkg:apk/alpine/curl@7.83.0-r0?arch=x86",
         "pkg:apk/alpine/apk@2.12.9-r3?arch=x86"
       ]
     },
+    "bazel": {
+      "description": "Bazel modules as specified at https://bazel.build/external/module",
+      "default_registry": "https://bcr.bazel.build",
+      "namespace_requirement": "prohibited",
+      "examples": [
+        "pkg:bazel/rules_java@7.8.0",
+        "pkg:bazel/curl@8.8.0.bcr.1"
+      ]
+    },
     "bitbucket": {
       "description": "Bitbucket-based packages",
       "default_registry": "https://bitbucket.org",
+      "namespace_requirement": "required",
       "examples": [
         "pkg:bitbucket/atlassian/python-bitbucket@0.1.0",
         "pkg:bitbucket/birkenfeld/pygments-main@2.13.0",
@@ -33,6 +45,7 @@
     "bitnami": {
       "description": "Bitnami-based packages",
       "default_registry": null,
+      "namespace_requirement": "prohibited",
       "examples": [
         "pkg:bitnami/wordpress?distro=debian-12",
         "pkg:bitnami/wordpress@6.2.0?distro=debian-12",
@@ -40,9 +53,28 @@
         "pkg:bitnami/wordpress@6.2.0?arch=arm64&distro=photon-4"
       ]
     },
+    "brew": {
+      "description": "Homebrew packages for macOS and Linux",
+      "default_registry": "https://formulae.brew.sh/",
+      "namespace_requirement": "optional",
+      "examples": [
+        "pkg:brew/sqlite@3.43.2",
+        "pkg:brew/go"
+      ]
+    },
+    "bsd": {
+      "description": "FreeBSD and other BSD operating system packages",
+      "default_registry": null,
+      "namespace_requirement": "required",
+      "examples": [
+        "pkg:bsd/freebsd/emacs@30.1_2?distro=14.3&epoch=3",
+        "pkg:bsd/freebsd/python311@3.11.13?distro=14.3"
+      ]
+    },
     "cargo": {
       "description": "Cargo packages for Rust",
       "default_registry": "https://crates.io",
+      "namespace_requirement": "prohibited",
       "examples": [
         "pkg:cargo/rand@0.7.2",
         "pkg:cargo/clap@4.0.32",
@@ -58,9 +90,19 @@
         }
       }
     },
+    "chrome-extension": {
+      "description": "Chrome browser extensions",
+      "default_registry": "https://chromewebstore.google.com/",
+      "namespace_requirement": "prohibited",
+      "examples": [
+        "pkg:chrome-extension/hlepfoohegkhhmjieoechaddaejaokhf@25.7.1",
+        "pkg:chrome-extension/dncgedbnidfkppmdgfgidcepclnokpkb@6.0.2.3611"
+      ]
+    },
     "cocoapods": {
       "description": "CocoaPods pods",
       "default_registry": "https://cdn.cocoapods.org/",
+      "namespace_requirement": "prohibited",
       "examples": [
         "pkg:cocoapods/Alamofire@5.6.4",
         "pkg:cocoapods/SwiftyJSON@5.0.1",
@@ -99,6 +141,7 @@
     "conan": {
       "description": "Conan C/C++ packages. The purl is designed to closely resemble the Conan-native <package-name>/<package-version>@<user>/<channel> syntax for package references as specified in https://docs.conan.io/en/1.46/cheatsheet.html#package-terminology",
       "default_registry": "https://conan.io/center",
+      "namespace_requirement": "optional",
       "examples": [
         "pkg:conan/openssl@3.0.3",
         "pkg:conan/openssl.org/openssl@3.0.3?user=bincrafters&channel=stable",
@@ -117,6 +160,7 @@
     "conda": {
       "description": "conda is for Conda packages",
       "default_registry": "https://repo.anaconda.com",
+      "namespace_requirement": "prohibited",
       "examples": [
         "pkg:conda/numpy@1.24.1",
         "pkg:conda/pandas@1.5.2",
@@ -135,6 +179,7 @@
     "cpan": {
       "description": "CPAN Perl packages",
       "default_registry": "https://www.cpan.org/",
+      "namespace_requirement": "optional",
       "examples": [
         "pkg:cpan/Moose@2.2014",
         "pkg:cpan/DBI@1.643",
@@ -163,6 +208,7 @@
     "deb": {
       "description": "Debian packages, Debian derivatives, and Ubuntu packages",
       "default_registry": null,
+      "namespace_requirement": "required",
       "examples": [
         "pkg:deb/debian/curl@7.50.3-1?arch=i386&distro=jessie",
         "pkg:deb/debian/dpkg@1.19.0.4?arch=amd64&distro=stretch",
@@ -174,6 +220,7 @@
     "docker": {
       "description": "for Docker images",
       "default_registry": "https://hub.docker.com",
+      "namespace_requirement": "optional",
       "examples": [
         "pkg:docker/nginx@1.21.6",
         "pkg:docker/ubuntu@20.04",
@@ -204,15 +251,27 @@
     "generic": {
       "description": "The generic type is for plain, generic packages that do not fit anywhere else such as for \"upstream-from-distro\" packages. In particular this is handy for a plain version control repository such as a bare git repo in combination with a vcs_url.",
       "default_registry": null,
+      "namespace_requirement": "optional",
       "examples": [
         "pkg:generic/openssl@1.1.10g",
         "pkg:generic/openssl@1.1.10g?download_url=https://openssl.org/source/openssl-1.1.0g.tar.gz&checksum=sha256:de4d501267da",
         "pkg:generic/bitwarderl?vcs_url=git%2Bhttps://git.fsfe.org/dxtr/bitwarderl%40cc55108da32"
       ]
     },
+    "git": {
+      "description": "Git-based source packages",
+      "default_registry": null,
+      "namespace_requirement": "required",
+      "examples": [
+        "pkg:git/codeberg.org/forgejo/forgejo@a72d2c07cfca03b55371089de6aa230d8c951fa0",
+        "pkg:git/projects.blender.org/blender/blender.git",
+        "pkg:git/gitlab.gnome.org/GNOME/adwaita-fonts"
+      ]
+    },
     "github": {
       "description": "GitHub-based packages",
       "default_registry": "https://github.com",
+      "namespace_requirement": "required",
       "examples": [
         "pkg:github/torvalds/linux@6.1",
         "pkg:github/microsoft/vscode@1.74.2",
@@ -222,6 +281,7 @@
     "golang": {
       "description": "Go packages",
       "default_registry": "https://pkg.go.dev",
+      "namespace_requirement": "required",
       "ecosystems_registry": "proxy.golang.org",
       "examples": [
         "pkg:golang/github.com/gorilla/context@234fd47e07d1004f0aed9c",
@@ -243,6 +303,7 @@
     "hackage": {
       "description": "Haskell packages",
       "default_registry": "https://hackage.haskell.org",
+      "namespace_requirement": "prohibited",
       "examples": [
         "pkg:hackage/aeson@2.1.1.0",
         "pkg:hackage/lens@5.2",
@@ -263,6 +324,7 @@
     "hex": {
       "description": "Hex packages",
       "default_registry": "https://repo.hex.pm",
+      "namespace_requirement": "optional",
       "examples": [
         "pkg:hex/phoenix@1.6.15",
         "pkg:hex/ecto@3.9.4",
@@ -281,6 +343,7 @@
     "huggingface": {
       "description": "Hugging Face ML models",
       "default_registry": "https://huggingface.co",
+      "namespace_requirement": "required",
       "examples": [
         "pkg:huggingface/huggingface/distilbert-base-uncased@043235d6088ecd3dd5fb5ca3592b6913fd516027",
         "pkg:huggingface/microsoft/deberta-v3-base@559062ad13d311b87b2c455e67dcd5f1c8f65111?repository_url=https://hub-ci.huggingface.co"
@@ -297,9 +360,19 @@
         }
       }
     },
+    "julia": {
+      "description": "Julia packages",
+      "default_registry": null,
+      "namespace_requirement": "prohibited",
+      "examples": [
+        "pkg:julia/Dates@1.9.0?uuid=ade2ca70-3891-5945-98fb-dc099432e06a",
+        "pkg:julia/Dates?uuid=ade2ca70-3891-5945-98fb-dc099432e06a"
+      ]
+    },
     "luarocks": {
       "description": "Lua packages installed with LuaRocks",
       "default_registry": "https://luarocks.org",
+      "namespace_requirement": "optional",
       "examples": [
         "pkg:luarocks/luasocket@3.1.0-1",
         "pkg:luarocks/hisham/luafilesystem@1.8.0-1",
@@ -343,6 +416,7 @@
     "mlflow": {
       "description": "MLflow ML models (Azure ML, Databricks, etc.)",
       "default_registry": null,
+      "namespace_requirement": "prohibited",
       "examples": [
         "pkg:mlflow/creditfraud@3?repository_url=https://westus2.api.azureml.ms/mlflow/v1.0/subscriptions/a50f2011-fab8-4164-af23-c62881ef8c95/resourceGroups/TestResourceGroup/providers/Microsoft.MachineLearningServices/workspaces/TestWorkspace",
         "pkg:mlflow/trafficsigns@10?model_uuid=36233173b22f4c89b451f1228d700d49&run_id=410a3121-2709-4f88-98dd-dba0ef056b0a&repository_url=https://adb-5245952564735461.0.azuredatabricks.net/api/2.0/mlflow"
@@ -377,6 +451,7 @@
     "nuget": {
       "description": "NuGet .NET packages",
       "default_registry": "https://www.nuget.org",
+      "namespace_requirement": "prohibited",
       "examples": [
         "pkg:nuget/Newtonsoft.Json@13.0.1",
         "pkg:nuget/EntityFramework@6.4.4",
@@ -397,6 +472,7 @@
     "oci": {
       "description": "For artifacts stored in registries that conform to the OCI Distribution Specification https://github.com/opencontainers/distribution-spec including container images built by Docker and others",
       "default_registry": null,
+      "namespace_requirement": "prohibited",
       "examples": [
         "pkg:oci/debian@sha256%3A244fd47e07d10?repository_url=docker.io/library/debian&arch=amd64&tag=latest",
         "pkg:oci/debian@sha256%3A244fd47e07d10?repository_url=ghcr.io/debian&tag=bullseye",
@@ -404,9 +480,27 @@
         "pkg:oci/hello-wasm@sha256%3A244fd47e07d10?tag=v1"
       ]
     },
+    "opam": {
+      "description": "Opam packages",
+      "default_registry": "https://opam.ocaml.org",
+      "namespace_requirement": "prohibited",
+      "examples": [
+        "pkg:opam/ocaml-base-compiler@5.2.0"
+      ]
+    },
+    "otp": {
+      "description": "BEAM/OTP applications written in Elixir, Erlang, Gleam and other BEAM languages",
+      "default_registry": null,
+      "namespace_requirement": "prohibited",
+      "examples": [
+        "pkg:otp/erts@10.6.3?platform=linux&arch=amd64&repository_url=https:%2F%2Fgithub.com%2Ferlang%2Fotp&vcs_url=git%2Bhttps:%2F%2Fgithub.com%2Ferlang%2Fotp.git",
+        "pkg:otp/stdlib@3.11.2?repository_url=https:%2F%2Fgithub.com%2Ferlang%2Fotp&vcs_url=git%2Bhttps:%2F%2Fgithub.com%2Ferlang%2Fotp.git"
+      ]
+    },
     "pub": {
       "description": "Dart and Flutter pub packages",
       "default_registry": "https://pub.dartlang.org",
+      "namespace_requirement": "prohibited",
       "examples": [
         "pkg:pub/http@0.13.5",
         "pkg:pub/flutter@3.3.10",
@@ -425,6 +519,7 @@
     "pypi": {
       "description": "Python packages",
       "default_registry": "https://pypi.org",
+      "namespace_requirement": "prohibited",
       "examples": [
         "pkg:pypi/django@4.1.4",
         "pkg:pypi/requests@2.28.1",
@@ -446,6 +541,7 @@
     "qpkg": {
       "description": "QNX packages",
       "default_registry": null,
+      "namespace_requirement": "required",
       "examples": [
         "pkg:qpkg/blackberry/com.qnx.sdp@7.0.0.SGA201702151847",
         "pkg:qpkg/blackberry/com.qnx.qnx710.foo.bar.qux@0.0.4.01449T202205040833L"
@@ -454,6 +550,7 @@
     "rpm": {
       "description": "RPM packages",
       "default_registry": null,
+      "namespace_requirement": "required",
       "examples": [
         "pkg:rpm/fedora/curl@7.50.3-1.fc25?arch=i386&distro=fedora-25",
         "pkg:rpm/fedora/centerim@4.22.10-1.el6?arch=i686&epoch=1&distro=fedora-25"
@@ -462,6 +559,7 @@
     "swid": {
       "description": "PURL type for ISO-IEC 19770-2 Software Identification (SWID) tags.",
       "default_registry": null,
+      "namespace_requirement": "optional",
       "examples": [
         "pkg:swid/Acme/example.com/Enterprise+Server@1.0.0?tag_id=75b8c285-fa7b-485b-b199-4745e3004d0d",
         "pkg:swid/Fedora@29?tag_id=org.fedoraproject.Fedora-29",
@@ -486,6 +584,31 @@
           "version_in_url": false
         }
       }
+    },
+    "vcpkg": {
+      "description": "Packages from the vcpkg C/C++ package manager.",
+      "default_registry": null,
+      "namespace_requirement": "prohibited",
+      "examples": [
+        "pkg:vcpkg/bzip2@1.0.8?port_version=6"
+      ]
+    },
+    "vscode-extension": {
+      "description": "VS Code Extension packages",
+      "default_registry": "https://marketplace.visualstudio.com/vscode",
+      "namespace_requirement": "required",
+      "examples": [
+        "pkg:vscode-extension/ms-python/python@2023.25.10292213",
+        "pkg:vscode-extension/muhammad-sammy/csharp@2.15.30?repository_url=https:%2F%2Fopen-vsx.org"
+      ]
+    },
+    "yocto": {
+      "description": "Yocto Project recipes",
+      "default_registry": null,
+      "namespace_requirement": "optional",
+      "examples": [
+        "pkg:yocto/core/glibc@2.35"
+      ]
     },
     "clojars": {
       "description": "Clojars packages",

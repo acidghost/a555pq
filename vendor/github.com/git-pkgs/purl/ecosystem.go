@@ -5,18 +5,22 @@ import (
 )
 
 const (
-	ecosystemAlpine        = "alpine"
-	ecosystemArch          = "arch"
-	ecosystemComposer      = "composer"
-	ecosystemGitHubActions = "github-actions"
-	ecosystemGolang        = "golang"
-	ecosystemMaven         = "maven"
-	ecosystemNPM           = "npm"
-	ecosystemPackagist     = "packagist"
-	ecosystemRubyGems      = "rubygems"
-	ecosystemSwift         = "swift"
-	purlTypeGem            = "gem"
-	purlTypeGitHubActions  = "githubactions"
+	ecosystemAlpine         = "alpine"
+	ecosystemArch           = "arch"
+	ecosystemComposer       = "composer"
+	ecosystemFreeBSD        = "freebsd"
+	ecosystemGit            = "git"
+	ecosystemGitHubActions  = "github-actions"
+	ecosystemGolang         = "golang"
+	ecosystemMaven          = "maven"
+	ecosystemNPM            = "npm"
+	ecosystemPackagist      = "packagist"
+	ecosystemRubyGems       = "rubygems"
+	ecosystemSwift          = "swift"
+	purlTypeGem             = "gem"
+	purlTypeGitHubActions   = "githubactions"
+	purlTypeVSCodeExtension = "vscode-extension"
+	purlTypeBSD             = "bsd"
 )
 
 // purlTypeForEcosystem maps ecosystem names to PURL types.
@@ -24,6 +28,7 @@ const (
 var purlTypeForEcosystem = map[string]string{
 	ecosystemAlpine:        "apk",
 	ecosystemArch:          "alpm",
+	ecosystemFreeBSD:       "bsd",
 	ecosystemRubyGems:      purlTypeGem,
 	ecosystemPackagist:     ecosystemComposer,
 	ecosystemGitHubActions: purlTypeGitHubActions,
@@ -70,8 +75,9 @@ var depsdevSystemNames = map[string]string{
 
 // defaultNamespaces defines default namespaces for certain ecosystems.
 var defaultNamespaces = map[string]string{
-	ecosystemAlpine: ecosystemAlpine,
-	ecosystemArch:   ecosystemArch,
+	ecosystemAlpine:  ecosystemAlpine,
+	ecosystemArch:    ecosystemArch,
+	ecosystemFreeBSD: ecosystemFreeBSD,
 }
 
 // NormalizeEcosystem returns the canonical ecosystem name.
@@ -143,13 +149,13 @@ func PURLTypeToDepsdev(purlType string) string {
 //   - npm: @scope/pkg -> namespace="@scope", name="pkg"
 //   - maven: group:artifact -> namespace="group", name="artifact"
 //   - golang: github.com/foo/bar -> namespace="github.com/foo", name="bar"
+//   - git: codeberg.org/forgejo/forgejo -> namespace="codeberg.org", name="forgejo/forgejo"
 //   - composer: vendor/package -> namespace="vendor", name="package"
 //   - alpine: pkg -> namespace="alpine", name="pkg"
 //   - arch: pkg -> namespace="arch", name="pkg"
+//   - freebsd: pkg -> namespace="freebsd", name="pkg"
 //   - swift: host/owner/package -> namespace="host/owner", name="package"
-//
-// Swift registry identities do not contain source repository coordinates and
-// return nil because the Swift PURL type cannot represent them.
+//     or scope.package -> namespace="scope", name="package"
 func MakePURL(ecosystem, name, version string) *PURL {
 	purlType := EcosystemToPURLType(ecosystem)
 	namespace, pkgName, ok := splitNamespace(ecosystem, name)
