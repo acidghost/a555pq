@@ -2,8 +2,6 @@ module github.com/acidghost/a555pq
 
 go 1.26.0
 
-toolchain go1.27.3
-
 require (
 	github.com/Masterminds/semver v1.5.0
 	github.com/git-pkgs/registries v0.13.0
