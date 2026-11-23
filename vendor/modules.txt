@@ -12,18 +12,19 @@ github.com/docker/cli/cli/config/types
 ## explicit; go 1.21
 github.com/docker/docker-credential-helpers/client
 github.com/docker/docker-credential-helpers/credentials
-# github.com/git-pkgs/pom v0.1.8
+# github.com/git-pkgs/pom v0.1.9
 ## explicit; go 1.26
 github.com/git-pkgs/pom
 # github.com/git-pkgs/purl v0.2.1
 ## explicit; go 1.26.0
 github.com/git-pkgs/purl
-# github.com/git-pkgs/registries v0.13.2
+# github.com/git-pkgs/registries v0.14.0
 ## explicit; go 1.26.0
 github.com/git-pkgs/registries
 github.com/git-pkgs/registries/all
 github.com/git-pkgs/registries/client
 github.com/git-pkgs/registries/internal/apk
+github.com/git-pkgs/registries/internal/apm
 github.com/git-pkgs/registries/internal/cargo
 github.com/git-pkgs/registries/internal/clojars
 github.com/git-pkgs/registries/internal/cocoapods
@@ -31,6 +32,7 @@ github.com/git-pkgs/registries/internal/conda
 github.com/git-pkgs/registries/internal/core
 github.com/git-pkgs/registries/internal/cpan
 github.com/git-pkgs/registries/internal/cran
+github.com/git-pkgs/registries/internal/deb
 github.com/git-pkgs/registries/internal/deno
 github.com/git-pkgs/registries/internal/dub
 github.com/git-pkgs/registries/internal/elm
@@ -50,18 +52,21 @@ github.com/git-pkgs/registries/internal/nuget
 github.com/git-pkgs/registries/internal/packagist
 github.com/git-pkgs/registries/internal/pub
 github.com/git-pkgs/registries/internal/pypi
+github.com/git-pkgs/registries/internal/rpm
 github.com/git-pkgs/registries/internal/rubygems
 github.com/git-pkgs/registries/internal/swift
 github.com/git-pkgs/registries/internal/terraform
 github.com/git-pkgs/registries/internal/urlparser
+github.com/git-pkgs/registries/internal/vscodeextension
+github.com/git-pkgs/registries/internal/xzlimit
 github.com/git-pkgs/registries/safehttp
-# github.com/git-pkgs/spdx v0.3.3
+# github.com/git-pkgs/spdx v0.3.6
 ## explicit; go 1.26
 github.com/git-pkgs/spdx
 # github.com/git-pkgs/vers v0.7.2
 ## explicit; go 1.26
 github.com/git-pkgs/vers
-# github.com/github/go-spdx/v2 v2.7.0
+# github.com/github/go-spdx/v2 v2.8.0
 ## explicit; go 1.24
 github.com/github/go-spdx/v2/spdxexp
 github.com/github/go-spdx/v2/spdxexp/spdxlicenses
@@ -95,13 +100,14 @@ github.com/google/go-containerregistry/pkg/v1/types
 # github.com/inconshreveable/mousetrap v1.1.0
 ## explicit; go 1.18
 github.com/inconshreveable/mousetrap
-# github.com/klauspost/compress v1.20.2
+# github.com/klauspost/compress v1.20.3
 ## explicit; go 1.25
 github.com/klauspost/compress
 github.com/klauspost/compress/fse
 github.com/klauspost/compress/huff0
 github.com/klauspost/compress/internal/cpuinfo
 github.com/klauspost/compress/internal/le
+github.com/klauspost/compress/internal/regmask
 github.com/klauspost/compress/internal/snapref
 github.com/klauspost/compress/zstd
 github.com/klauspost/compress/zstd/internal/xxhash
@@ -124,6 +130,11 @@ github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.10
 ## explicit; go 1.12
 github.com/spf13/pflag
+# github.com/ulikunitz/xz v0.5.17
+## explicit; go 1.20
+github.com/ulikunitz/xz/internal/hash
+github.com/ulikunitz/xz/internal/xlog
+github.com/ulikunitz/xz/lzma
 # go.yaml.in/yaml/v3 v3.0.6
 ## explicit; go 1.16
 go.yaml.in/yaml/v3

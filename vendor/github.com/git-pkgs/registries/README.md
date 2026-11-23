@@ -1,6 +1,6 @@
 # registries
 
-Go library for fetching package metadata from registry APIs. Supports 29 ecosystems with a unified interface. Also provides sub-packages for HTTP client usage (`client/`), streaming artifact downloads (`fetch/`) and registry change feeds (`changes/`).
+Go library for fetching package metadata from registry APIs. Supports 30 ecosystems with a unified interface. Also provides sub-packages for HTTP client usage (`client/`), streaming artifact downloads (`fetch/`) and registry change feeds (`changes/`).
 
 ## Installation
 
@@ -133,9 +133,12 @@ packages = registries.BulkFetchPackagesWithConcurrency(ctx, purls, nil, 5)
 | Go | `pkg:golang/github.com/gorilla/mux@v1.8.0` |
 | Maven | `pkg:maven/org.apache.commons/commons-lang3@3.12.0` |
 | RubyGems | `pkg:gem/rails@7.1.0` |
-| Terraform | `pkg:terraform/hashicorp/consul/aws@0.11.0` |
+| Terraform | `pkg:terraform/hashicorp/consul/aws@0.11.0` (module), `pkg:terraform/hashicorp/random@3.6.0` (provider) |
 | GitHub Actions | `pkg:githubactions/actions/checkout@v4` |
+| VS Code extension | `pkg:vscode-extension/redhat/vscode-yaml@1.15.0` |
 | Alpine | `pkg:apk/alpine/curl@8.22.0-r0?arch=x86_64&repository_url=https://dl-cdn.alpinelinux.org/alpine/v3.23/main/x86_64` |
+| Debian | `pkg:deb/debian/curl@7.88.1-10+deb12u14?arch=amd64&distro=bookworm&repository_url=https://deb.debian.org/debian%3Fsuites%3Dbookworm%2Cbookworm-updates%26architectures%3Damd64` |
+| RPM | `pkg:rpm/fedora/curl@8.15.0-4.fc43?arch=x86_64&distro=fedora-43&repository_url=https://dl.fedoraproject.org/pub/fedora/linux/releases/43/Everything/x86_64/os%3Fdistro%3Dfedora-43` |
 
 ## Direct Registry Usage
 
@@ -196,11 +199,23 @@ import _ "github.com/git-pkgs/registries/all"
 | Terraform | `terraform` | https://registry.terraform.io |
 | Swift | `swift` | URL required |
 | Alpine | `apk` | URL required |
+| Debian | `deb` | URL required |
+| RPM | `rpm` | URL required |
 | GitHub Actions | `githubactions` | https://api.github.com |
+| VS Code extension | `vscode-extension` | https://open-vsx.org |
+| APM | None | URL required |
 
 The Alpine URL is one repository architecture directory, such as `https://dl-cdn.alpinelinux.org/alpine/v3.23/main/x86_64`, or the `APKINDEX.tar.gz` inside it. The client doesn't pick a release, component or architecture from a mirror root. It reads v2 `APKINDEX.tar.gz` indexes. When a directory serves a v3 `Packages.adb`, the client returns an error rather than reading the v2 index.
 
+The Debian URL is an archive root with the suites, components and architectures to read as query parameters, which archives don't use: `https://deb.debian.org/debian?suites=bookworm,bookworm-updates&components=main&architectures=amd64`. `components` defaults to `main`. An archive under another root, such as `https://deb.debian.org/debian-security` with suite `bookworm-security`, is a registry of its own. The client reads `dists/<suite>/InRelease`, falling back to `Release`, and checks each `Packages` index against its SHA256 there; a suite with neither is read unchecked. It tries `Packages.xz`, `Packages.gz` and `Packages` in that order, of those the Release lists, and decodes them as a stream. The signature on `InRelease` is not checked. Each artifact records `arch` and `distro`, the suite's codename without `-updates` or `-security`, for the `arch` and `distro` PURL qualifiers. Versions keep their epoch (`1:9.2p1-2+deb12u3`) and compare with the `deb` scheme. Source packages (`architectures=source`) are not supported. In a PURL, `repository_url` is this whole URL, query included, so its `?`, `=`, `&` and `,` are percent-encoded.
+
+The RPM URL is one repository, the directory that holds `repodata/`, such as `https://dl.fedoraproject.org/pub/fedora/linux/releases/43/Everything/x86_64/os`. The client doesn't pick a release, variant or architecture from a mirror root, and doesn't follow mirror lists or metalinks. It reads `repodata/repomd.xml`, follows its `primary` entry, checks that file against the checksum and size listed there, and decodes `.zst`, `.xz`, `.gz` or plain XML as a stream. Repository metadata doesn't name its distribution, so the `distro` to record on artifacts is given as a query parameter: `.../x86_64/os?distro=fedora-43`. Each artifact records `arch`, `epoch` and that `distro`, with the package's own checksum as integrity (`sha256-...`). The version number is `version-release`, as in the `rpm` PURL type, where the epoch is a qualifier; versions are ordered by epoch, version and release. Dependencies are the requirements that name packages, leaving out file paths, sonames and capabilities in parentheses such as `rpmlib(...)`; a constraint on a package is listed once per distinct constraint. A virtual capability such as `webserver` can't be told from a package name and is listed as one. In a PURL, `repository_url` is the whole URL, `distro` parameter included, so its `?` and `=` are percent-encoded.
+
 GitHub Actions are git repositories, so `FetchPackage` reads `/repos/{owner}/{repo}` and `FetchVersions` lists tags from the GitHub REST API. Unauthenticated requests are limited to 60 per hour. A subdirectory action such as `pkg:githubactions/github/codeql-action/init@v3` resolves to the `github/codeql-action` repository. `URLs().Download` returns the `/archive/{ref}.tar.gz` source tarball for any tag, branch or commit SHA. GitHub doesn't guarantee these tarballs are byte-stable, so versions carry no `Integrity`. Dependencies and maintainers return an error wrapping `errors.ErrUnsupported`. For GitHub Enterprise Server, pass the `/api/v3` API root as the base URL.
+
+The Terraform URL is a module and provider registry, such as `https://registry.opentofu.org`. The client reads the registry's service discovery document, `/.well-known/terraform.json` on its host, once, and sends module and provider requests to the `modules.v1` and `providers.v1` URLs it names. A registry that has no document (a 4xx other than 429, or a body that isn't JSON), or no entry for a service, is read at `{URL}/v1/modules/` and `{URL}/v1/providers/`, and registry.terraform.io is always read there without asking. `URLs().Download` builds a module's download URL from the base URL without reading the document.
+
+VS Code extensions are read from [Open VSX](https://open-vsx.org), or from a self-hosted Open VSX server given as the base URL. The purl spec makes the Visual Studio Marketplace the default for `vscode-extension`, but the client has no Marketplace support, so a PURL without `repository_url` also resolves to Open VSX. `URLs().PURL` always adds the registry as `repository_url`. Names are `publisher/name` or VS Code's `publisher.name`. An extension can publish a separate build for each target platform, such as `linux-x64` or `darwin-arm64`. Each version from `FetchVersions` and `FetchVersion` carries one artifact per build, with `platform`, `signature` (the `.sigzip`) and `sha256` (the URL of the checksum file) in its metadata. `URLs().Download` returns the universal build, which a version built only for specific platforms doesn't have; the `platform` qualifier, as in `pkg:vscode-extension/muhammad-sammy/csharp@2.160.9?platform=linux-x64`, makes `fetch.Resolver` pick the build for that platform, or the universal one when there is none. `FetchDependencies` lists both the extensions a version depends on and the ones it bundles as an extension pack. `FetchMaintainers` returns the user who published the latest version.
 
 ### Swift registries
 
@@ -241,6 +256,32 @@ metadata but are not verified.
 manifests rather than structured dependency data, and has no maintainer endpoint.
 The adapter does not execute Swift or download archives. Authentication can be
 provided through the shared client's HTTP transport.
+
+### APM registries
+
+[APM](https://github.com/microsoft/apm) registry lookups use its experimental
+registry API and require an explicit registry URL. Package IDs are `owner/repo`:
+
+```go
+reg, err := registries.New("apm", "https://registry.example.com/api/apm", nil)
+// Handle err before using reg.
+versions, err := reg.FetchVersions(ctx, "acme/web-skills")
+```
+
+`FetchVersions` reads `GET /v1/packages/{owner}/{repo}/versions` and returns
+versions newest first by `published_at`. Each version's `digest` becomes its
+`Integrity`, and its single artifact points at
+`/v1/packages/{owner}/{repo}/versions/{version}/download`. Malformed digests,
+timestamps or duplicate versions return an error. In a longer ID such as
+`group/subgroup/repo`, every segment before the last forms the owner, which is
+sent as one percent-encoded segment as APM's client does.
+
+`FetchPackage` reports the name, the owner as `Namespace` and the newest version.
+An `owner/repo` ID does not establish a GitHub source, so `Repository` stays
+empty and `URLs().PURL` returns an empty string. `FetchDependencies` and
+`FetchMaintainers` return errors wrapping `errors.ErrUnsupported`. MCP server
+discovery uses a separate API and is not covered. Authentication can be provided
+through the shared client's HTTP transport.
 
 ## Types
 
@@ -539,7 +580,7 @@ info, err := resolver.Resolve(ctx, "cargo", "serde", "1.0.0")
 // info.Integrity may be populated for metadata-resolved URLs
 ```
 
-When a version has several files, `ResolveWithOptions` picks one by PURL qualifiers. `arch`, `distro`, `subdir` and `build` are matched against artifact metadata, and an artifact that doesn't record a qualifier isn't ruled out by it. `repository_url` and `channel` are ignored: register a registry for that URL instead.
+When a version has several files, `ResolveWithOptions` picks one by PURL qualifiers. `arch`, `distro`, `subdir`, `build` and `platform` are matched against artifact metadata, and an artifact that doesn't record a qualifier isn't ruled out by it. An artifact whose `platform` is `universal` matches any requested platform, after one built for that platform. When a registry lists no artifacts for the version, or doesn't list the version, the URL from `URLs().Download` is returned. `repository_url` and `channel` are ignored: register a registry for that URL instead.
 
 ```go
 info, err := resolver.ResolveWithOptions(ctx, "conda", "zlib", "1.3.1", fetch.ResolveOptions{
